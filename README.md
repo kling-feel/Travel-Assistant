@@ -1,12 +1,12 @@
 # 旅行助手（企业项目改造中）
 
-这是一个使用虚构数据的旅行助手求职作品。保留 FastAPI 和 LangGraph 主助手／专门助手结构，逐步补上身份隔离、逐笔交易确认、持久化与测试。当前为 **P0 基础搭建阶段**：可以生成演示数据和启动基础 API；旧交易接口默认关闭，新的航班／酒店交易流程尚未完成。
+这是一个使用虚构数据的旅行助手求职作品。保留 FastAPI 和 LangGraph 主助手／专门助手结构，逐步补上身份隔离、逐笔交易确认、持久化与测试。**P0 基础搭建已完成**：可以导入演示数据和启动基础 API；旧交易接口默认关闭，新的航班／酒店交易流程尚未完成。
 
 项目方案见 [产品需求](docs/enterprise/产品需求.md)、[软件架构](docs/enterprise/软件架构.md) 和 [当前进度](docs/enterprise/当前进度.md)。
 
 ## 数据从哪里来
 
-仓库中的 `data/fixtures/demo_source.sqlite` 是从原有的大型虚构 SQLite 数据精选、匿名化得到的小样本：14 条汉堡至巴塞尔航班、3 家巴塞尔酒店、2 张演示机票，约 24 KB。原有 `travel_new.sqlite` 和 `travel2.sqlite` 保持不变，也不需要放入 Docker 镜像或 Git。脚本每次按运行日期平移航班时间、重设酒店演示可用日期，再把选定数据写入 PostgreSQL 的 `demo_source` 暂存结构。后续阶段会建立正式旅客与订单模型。
+仓库中的 `data/fixtures/demo_source.sqlite` 是从原有的大型虚构 SQLite 数据精选、匿名化得到的小样本：14 条汉堡至巴塞尔航班、3 家巴塞尔酒店、2 张演示机票，约 24 KB。原有 `travel_new.sqlite` 和 `travel2.sqlite` 保持不变，也不需要放入 Docker 镜像或 Git。每次导入时，脚本以一张已有的下午机票为基准，计算一个统一时间差，将所有航班时间整体平移到演示日期附近，并更新酒店可用日期；原始样本及航班间隔不变。数据写入 PostgreSQL 的 `demo_source` 暂存结构。后续阶段会建立正式旅客与订单模型。
 
 如果需要从自己的大型虚构 SQLite 重新精选数据，可以运行 `python scripts/build_demo_fixture.py --source travel_new.sqlite --output data/fixtures/another_demo_source.sqlite`。脚本不会覆盖已有 fixture。默认导入使用仓库内的小样本；可用 `--source` 指向另一份结构相同的 SQLite 文件。
 
@@ -32,7 +32,7 @@
    docker compose exec -T db psql -U travel_app -d travel_demo -c "SELECT count(*) FROM demo_source.flight_orders"
    ```
 
-   预期分别为 14 和 2。反复运行导入脚本会在一笔数据库事务中重置此暂存数据。Docker 的命名数据卷保存 PostgreSQL 数据；`docker compose down` 不会清除该卷。
+   预期分别为 14 和 2。以 2026-10-17 为演示日期时，一张已有机票与一条候选航班分别在柏林当地 2026-10-18 的 17:43 和 17:58。每次开始新的演示或演示日期变化时，重新运行导入命令即可按当天日期整体平移；一次演示过程中不需重复导入。反复运行导入脚本会在一笔数据库事务中重置 `demo_source` 暂存数据。Docker 的命名数据卷保存 PostgreSQL 数据；`docker compose down` 不会清除该卷。
 
 4. 启动基础 API：
 
@@ -49,5 +49,4 @@ P0 启动健康检查无需模型密钥，也不会调用模型。后续阶段�
 ## 当前限制
 
 - `demo_source` 是精选数据的暂存结构，尚未接到新的业务 API；目前不能演示真实的改签／预订闭环。
-- 尚未在本机 Docker 中验证 PostgreSQL 导入；完成 Docker 安装后需要运行上述导入和计数检查。
 - 旧代码的第三方密钥曾出现在源码和本地私有配置中。源码引用已移除；若这些密钥仍有效，所有者需要到相应服务后台轮换。

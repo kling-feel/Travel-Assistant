@@ -10,8 +10,10 @@ import argparse
 import json
 import sqlite3
 import subprocess
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+
+import pytz
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,10 +36,41 @@ def insert(table: str, columns: tuple[str, ...], values: tuple[object, ...]) -> 
     )
 
 
-def moved_datetime(value: str | None, days: int) -> str | None:
+def moved_datetime(value: str | None, shift: timedelta) -> str | None:
     if not value or value == r"\N":
         return None
-    return (datetime.fromisoformat(value) + timedelta(days=days)).isoformat(sep=" ")
+    return (datetime.fromisoformat(value).astimezone(timezone.utc) + shift).isoformat(sep=" ")
+
+
+def demo_time_shift(
+    flights: list[sqlite3.Row], orders: list[tuple[int, sqlite3.Row]],
+    as_of: date, departure_timezone: str,
+) -> timedelta:
+    """Move one booked afternoon flight to tomorrow, preserving all flight gaps."""
+    booked_flight_ids = {flight_id for flight_id, _ in orders}
+    departures = {
+        flight["flight_id"]: datetime.fromisoformat(flight["scheduled_departure"])
+        for flight in flights
+    }
+    for flight in flights:
+        departure = departures[flight["flight_id"]]
+        if flight["flight_id"] not in booked_flight_ids or not 12 <= departure.hour < 18:
+            continue
+        has_alternative = any(
+            other["flight_id"] != flight["flight_id"]
+            and departures[other["flight_id"]].date() == departure.date()
+            and 12 <= departures[other["flight_id"]].hour < 18
+            for other in flights
+        )
+        if has_alternative:
+            # The fictional source offset is unrelated to the departure airport.
+            # Align this one flight with tomorrow's airport-local clock time.
+            local_target = datetime.combine(
+                as_of + timedelta(days=1), departure.replace(tzinfo=None).time()
+            )
+            target = pytz.timezone(departure_timezone).localize(local_target, is_dst=None)
+            return target - departure
+    raise ValueError("Source lacks a booked afternoon flight with a same-day alternative")
 
 
 def collect_data(connection: sqlite3.Connection, as_of: date) -> tuple[str, dict[str, object]]:
@@ -60,9 +93,6 @@ def collect_data(connection: sqlite3.Connection, as_of: date) -> tuple[str, dict
     ).fetchall()
     if len(flights) < 4:
         raise ValueError("Source has too few route flights for the demo")
-    start = date.fromisoformat(flights[0]["scheduled_departure"][:10])
-    shift_days = (as_of + timedelta(days=1) - start).days
-
     airports = connection.execute(
         "SELECT airport_code, airport_name, city, timezone FROM airports_data "
         "WHERE airport_code IN (?, ?) ORDER BY airport_code",
@@ -96,6 +126,10 @@ def collect_data(connection: sqlite3.Connection, as_of: date) -> tuple[str, dict
             break
     if len(orders) != 2:
         raise ValueError("Source lacks two distinct ticketed travelers on selected flights")
+    departure_timezone = next(
+        airport["timezone"] for airport in airports if airport["airport_code"] == route[0]
+    )
+    shift = demo_time_shift(flights, orders, as_of, departure_timezone)
 
     lines = [
         "-- Generated from an existing fictional SQLite database. Do not edit by hand.",
@@ -135,8 +169,8 @@ def collect_data(connection: sqlite3.Connection, as_of: date) -> tuple[str, dict
                 ),
                 (
                     flight["flight_id"], flight["flight_no"],
-                    moved_datetime(flight["scheduled_departure"], shift_days),
-                    moved_datetime(flight["scheduled_arrival"], shift_days),
+                    moved_datetime(flight["scheduled_departure"], shift),
+                    moved_datetime(flight["scheduled_arrival"], shift),
                     flight["departure_airport"], flight["arrival_airport"], flight["status"],
                 ),
             )
