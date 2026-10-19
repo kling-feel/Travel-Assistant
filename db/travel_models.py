@@ -1,0 +1,271 @@
+"""P1 travel tables. Orders belong to travelers, never to a global hotel flag."""
+
+from sqlalchemy import (CheckConstraint, Column, Date, DateTime, Float, ForeignKey,
+                        Integer, JSON, MetaData, String, Table, Text,
+                        UniqueConstraint, Index, func, text)
+
+metadata = MetaData()
+
+travelers = Table(
+    "travelers", metadata,
+    Column("id", String(40), primary_key=True),
+    Column("username", String(80), nullable=False, unique=True),
+    Column("password_hash", String(200), nullable=False),
+    Column("display_name", String(80), nullable=False),
+    Column("active", Integer, nullable=False, default=1),
+)
+airports = Table(
+    "airports", metadata,
+    Column("code", String(8), primary_key=True),
+    Column("name", String(120), nullable=False),
+    Column("city", String(80), nullable=False),
+    Column("timezone", String(80), nullable=False),
+    Column("latitude", Float),
+    Column("longitude", Float),
+)
+flights = Table(
+    "flights", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("flight_no", String(30), nullable=False),
+    Column("departure_at", DateTime(timezone=True), nullable=False),
+    Column("arrival_at", DateTime(timezone=True), nullable=False),
+    Column("actual_departure_at", DateTime(timezone=True)),
+    Column("actual_arrival_at", DateTime(timezone=True)),
+    Column("departure_airport", String(8), ForeignKey("airports.code"), nullable=False),
+    Column("arrival_airport", String(8), ForeignKey("airports.code"), nullable=False),
+    Column("status", String(30), nullable=False),
+    Index("ix_flights_route_status_departure", "departure_airport", "arrival_airport",
+          "status", "departure_at"),
+)
+demo_state = Table(
+    "demo_state", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("as_of", Date, nullable=False),
+    Column("fixture_sha256", String(64), nullable=False),
+    Column("imported_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("id = 1"),
+)
+flight_offers = Table(
+    "flight_offers", metadata,
+    Column("flight_id", Integer, ForeignKey("flights.id"), primary_key=True),
+    Column("amount", Integer, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("rule_id", String(80), nullable=False),
+    CheckConstraint("amount >= 0"),
+    CheckConstraint("version >= 1"),
+)
+hotels = Table(
+    "hotels", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(120), nullable=False),
+    Column("city", String(80), nullable=False),
+    Column("price_tier", String(30)),
+    Column("nearby_airport", String(8), ForeignKey("airports.code")),
+    Column("latitude", Float),
+    Column("longitude", Float),
+    Index("ix_hotels_city_airport", "city", "nearby_airport"),
+)
+hotel_products = Table(
+    "hotel_products", metadata,
+    Column("id", String(80), primary_key=True),
+    Column("hotel_id", Integer, ForeignKey("hotels.id"), nullable=False),
+    Column("room_type", String(80), nullable=False),
+    Column("nightly_price", Integer, nullable=False),
+    Column("available_from", Date, nullable=False),
+    Column("available_until", Date, nullable=False),
+    Column("generation_rule", String(80)),
+    CheckConstraint("nightly_price >= 0"),
+    Index("ix_hotel_products_dates", "available_from", "available_until"),
+)
+rental_products = Table(
+    "rental_products", metadata,
+    Column("id", String(80), primary_key=True),
+    Column("airport_code", String(8), ForeignKey("airports.code"), nullable=False),
+    Column("city", String(80), nullable=False),
+    Column("name", String(120), nullable=False),
+    Column("vehicle_type", String(40), nullable=False),
+    Column("daily_price", Integer, nullable=False),
+    Column("latitude", Float, nullable=False),
+    Column("longitude", Float, nullable=False),
+    Column("available_from", Date, nullable=False),
+    Column("available_until", Date, nullable=False),
+    Column("generation_rule", String(80), nullable=False),
+    CheckConstraint("daily_price >= 0"),
+    CheckConstraint("available_until > available_from"),
+    CheckConstraint("latitude BETWEEN -90 AND 90"),
+    CheckConstraint("longitude BETWEEN -180 AND 180"),
+    Index("ix_rental_products_city_airport", "city", "airport_code"),
+    Index("ix_rental_products_dates", "available_from", "available_until"),
+)
+rental_orders = Table(
+    "rental_orders", metadata,
+    Column("id", String(80), primary_key=True),
+    Column("traveler_id", String(40), ForeignKey("travelers.id"), nullable=False),
+    Column("product_id", String(80), ForeignKey("rental_products.id"), nullable=False),
+    Column("pickup_at", DateTime(timezone=True), nullable=False),
+    Column("dropoff_at", DateTime(timezone=True), nullable=False),
+    Column("daily_price", Integer, nullable=False),
+    Column("billable_days", Integer, nullable=False),
+    Column("total_price", Integer, nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("version", Integer, nullable=False, default=1),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("dropoff_at > pickup_at"),
+    CheckConstraint("daily_price > 0"),
+    CheckConstraint("billable_days >= 1"),
+    CheckConstraint("total_price > 0"),
+    CheckConstraint("total_price = daily_price * billable_days"),
+    CheckConstraint("status IN ('confirmed', 'cancelled')"),
+    CheckConstraint("version >= 1"),
+    Index("ix_rental_orders_owner_pickup", "traveler_id", "pickup_at"),
+)
+Index("uq_rental_orders_active_slot", rental_orders.c.traveler_id,
+      rental_orders.c.product_id, rental_orders.c.pickup_at,
+      rental_orders.c.dropoff_at, unique=True,
+      postgresql_where=text("status = 'confirmed'"),
+      sqlite_where=text("status = 'confirmed'"))
+flight_orders = Table(
+    "flight_orders", metadata,
+    Column("id", String(80), primary_key=True),
+    Column("traveler_id", String(40), ForeignKey("travelers.id"), nullable=False),
+    Column("flight_id", Integer, ForeignKey("flights.id"), nullable=False),
+    Column("fare_conditions", String(80)),
+    Column("amount", Integer, nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("version", Integer, nullable=False, default=1),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("status IN ('confirmed', 'cancelled')"),
+    CheckConstraint("version >= 1"),
+)
+Index("uq_flight_orders_active_traveler_flight",
+      flight_orders.c.traveler_id, flight_orders.c.flight_id, unique=True,
+      postgresql_where=text("status = 'confirmed'"),
+      sqlite_where=text("status = 'confirmed'"))
+hotel_orders = Table(
+    "hotel_orders", metadata,
+    Column("id", String(80), primary_key=True),
+    Column("traveler_id", String(40), ForeignKey("travelers.id"), nullable=False),
+    Column("product_id", String(80), ForeignKey("hotel_products.id"), nullable=False),
+    Column("check_in", Date, nullable=False),
+    Column("check_out", Date, nullable=False),
+    Column("total_price", Integer, nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("version", Integer, nullable=False, default=1),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("check_out > check_in"),
+    CheckConstraint("status IN ('confirmed', 'cancelled')"),
+    CheckConstraint("version >= 1"),
+)
+policy_documents = Table(
+    "policy_documents", metadata,
+    Column("id", String(80), primary_key=True),
+    Column("version", Integer, nullable=False),
+    Column("title", String(120), nullable=False),
+    Column("scope", String(80), nullable=False),
+    Column("body", Text, nullable=False),
+)
+
+chat_sessions = Table(
+    "chat_sessions", metadata,
+    Column("id", String(36), primary_key=True),
+    Column("traveler_id", String(40), ForeignKey("travelers.id"), nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("status IN ('active', 'closed')"),
+    Index("ix_chat_sessions_traveler_updated", "traveler_id", "updated_at"),
+)
+
+chat_messages = Table(
+    "chat_messages", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("session_id", String(36), ForeignKey("chat_sessions.id"), nullable=False),
+    Column("sequence", Integer, nullable=False),
+    Column("role", String(20), nullable=False),
+    Column("content", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    UniqueConstraint("session_id", "sequence"),
+    CheckConstraint("sequence >= 1"),
+    CheckConstraint("role IN ('user', 'assistant')"),
+    CheckConstraint("length(content) BETWEEN 1 AND 4000"),
+    Index("ix_chat_messages_session_sequence", "session_id", "sequence"),
+)
+
+chat_turns = Table(
+    "chat_turns", metadata,
+    Column("id", String(36), primary_key=True),
+    Column("session_id", String(36), ForeignKey("chat_sessions.id"), nullable=False),
+    Column("request_key", String(80), nullable=False),
+    Column("user_content", Text, nullable=False),
+    Column("assistant_content", Text),
+    Column("references", JSON),
+    Column("action_cards", JSON),
+    Column("status", String(20), nullable=False),
+    Column("error_code", String(40)),
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("session_id", "request_key"),
+    CheckConstraint("status IN ('processing', 'completed', 'failed')"),
+    CheckConstraint("length(user_content) BETWEEN 1 AND 4000"),
+    Index("ix_chat_turns_session_started", "session_id", "started_at"),
+)
+Index("uq_chat_turns_processing_session", chat_turns.c.session_id,
+      unique=True, postgresql_where=text("status = 'processing'"),
+      sqlite_where=text("status = 'processing'"))
+
+pending_actions = Table(
+    "pending_actions", metadata,
+    Column("id", String(36), primary_key=True),
+    Column("traveler_id", String(40), ForeignKey("travelers.id"), nullable=False),
+    Column("session_id", String(36), ForeignKey("chat_sessions.id"), nullable=False),
+    Column("action_type", String(30), nullable=False),
+    Column("target_order_id", String(80)),
+    Column("target_order_version", Integer),
+    Column("parameters", JSON, nullable=False),
+    Column("before_snapshot", JSON),
+    Column("after_snapshot", JSON, nullable=False),
+    Column("price_summary", JSON, nullable=False),
+    Column("policy_id", String(80), ForeignKey("policy_documents.id"), nullable=False),
+    Column("policy_version", Integer, nullable=False),
+    Column("offer_version", Integer),
+    Column("status", String(20), nullable=False),
+    Column("idempotency_key", String(36), nullable=False, unique=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("action_type IN ('flight_book', 'flight_change', 'flight_cancel', "
+                    "'hotel_book', 'hotel_change', 'hotel_cancel', "
+                    "'rental_book', 'rental_cancel', 'rental_change')",
+                    name="pending_actions_action_type_check"),
+    CheckConstraint("status IN ('pending', 'confirmed', 'rejected', 'expired', 'invalidated')", name="pending_actions_status_check"),
+    CheckConstraint("expires_at > created_at"),
+    Index("ix_pending_actions_owner_session", "traveler_id", "session_id", "created_at"),
+)
+
+action_results = Table(
+    "action_results", metadata,
+    Column("action_id", String(36), ForeignKey("pending_actions.id"), primary_key=True),
+    Column("traveler_id", String(40), ForeignKey("travelers.id"), nullable=False),
+    Column("session_id", String(36), ForeignKey("chat_sessions.id"), nullable=False),
+    Column("order_id", String(80), nullable=False),
+    Column("order_snapshot", JSON, nullable=False),
+    Column("price_summary", JSON, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Index("ix_action_results_owner_created", "traveler_id", "created_at"),
+)
+
+audit_events = Table(
+    "audit_events", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("action_id", String(36), ForeignKey("pending_actions.id"), nullable=False),
+    Column("traveler_id", String(40), ForeignKey("travelers.id"), nullable=False),
+    Column("session_id", String(36), ForeignKey("chat_sessions.id"), nullable=False),
+    Column("event_type", String(30), nullable=False),
+    Column("summary", JSON, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("action_id", "event_type"),
+    Index("ix_audit_events_owner_created", "traveler_id", "created_at"),
+)

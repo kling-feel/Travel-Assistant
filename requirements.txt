@@ -7,9 +7,12 @@ python-jose[cryptography]==3.5.0
 passlib==1.7.4
 bcrypt==4.0.1
 python-multipart==0.0.24
+httpx==0.28.1
 langgraph==1.2.11
+langgraph-checkpoint-postgres==3.2.0
 langchain-core==1.6.2
 langchain-openai==1.1.11
 langchain-community==0.4.1
 pytz==2026.1.post1
+tzdata==2026.5
 tavily-python==0.8.5

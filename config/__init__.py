@@ -30,7 +30,12 @@ class Settings:
     POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
     POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5433"))
     DATABASE_URL = os.getenv("DATABASE_URL", "")
-    ENABLE_LEGACY_API = os.getenv("ENABLE_LEGACY_API", "false").lower() == "true"
+    AI_PROVIDER = os.getenv("AI_PROVIDER", "deepseek")
+    AI_MODEL = os.getenv("AI_MODEL", "")
+    AI_API_KEY = os.getenv("AI_API_KEY", "")
+    AI_BASE_URL = os.getenv("AI_BASE_URL", "")
+    ALIYUN_IQS_API_KEY = os.getenv("ALIYUN_IQS_API_KEY", "")
+    ALIYUN_IQS_ENABLED = os.getenv("ALIYUN_IQS_ENABLED", "false").lower() == "true"
 
 
 settings = Settings()

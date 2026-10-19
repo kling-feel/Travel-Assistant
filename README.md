@@ -1,14 +1,30 @@
 # 旅行助手（企业项目改造中）
 
-这是一个使用虚构数据的旅行助手求职作品。保留 FastAPI 和 LangGraph 主助手／专门助手结构，逐步补上身份隔离、逐笔交易确认、持久化与测试。**P0 基础搭建已完成**：可以导入演示数据和启动基础 API；旧交易接口默认关闭，新的航班／酒店交易流程尚未完成。
+这是一个使用虚构数据的旅行助手求职作品，保留 FastAPI 和 LangGraph 主助手／专门助手结构。**P0～P2.6e 已在本机 main 完成；P2.7 人工目录推荐已在功能分支通过整体验收，尚待主线发布。**新旅客 API 可以登录、进行多轮对话、查询本人行程和模拟航班／酒店／租车、读取虚构平台政策，并为九类交易生成待确认卡；旅客须逐笔确认或拒绝，未确认不会修改订单。功能分支现有 95 座可达城市、每城 2 个经逐页核查的经典地点；实时联网开关保持关闭。简单页面尚未完成，游览预订不在最终范围。旧交易接口始终不注册。
 
 项目方案见 [产品需求](docs/enterprise/产品需求.md)、[软件架构](docs/enterprise/软件架构.md) 和 [当前进度](docs/enterprise/当前进度.md)。
 
 ## 数据从哪里来
 
-仓库中的 `data/fixtures/demo_source.sqlite` 是从原有的大型虚构 SQLite 数据精选、匿名化得到的小样本：14 条汉堡至巴塞尔航班、3 家巴塞尔酒店、2 张演示机票，约 24 KB。原有 `travel_new.sqlite` 和 `travel2.sqlite` 保持不变，也不需要放入 Docker 镜像或 Git。每次导入时，脚本以一张已有的下午机票为基准，计算一个统一时间差，将所有航班时间整体平移到演示日期附近，并更新酒店可用日期；原始样本及航班间隔不变。数据写入 PostgreSQL 的 `demo_source` 暂存结构。后续阶段会建立正式旅客与订单模型。
+默认使用 [完整航线样本](data/fixtures/network_source.sqlite)：它只含 115 个机场和 33,121 条虚构航班，其中 15,383 条 `Scheduled` 覆盖 618 条航线；没有旅客、票号、预订或原酒店/租车记录。展示航班号为 `SIM-<航班ID>`，机场坐标和时区随样本提供。两个演示账号与机票由脚本合成；P2.4c 根据 104 个可达机场生成 312 个酒店/房型和 208 个租车产品，覆盖 95 个城市，不导入原始旅客记录。原有 `travel_new.sqlite` 和 `travel2.sqlite` 保持只读，不需要放入 Docker 镜像或 Git。
 
-如果需要从自己的大型虚构 SQLite 重新精选数据，可以运行 `python scripts/build_demo_fixture.py --source travel_new.sqlite --output data/fixtures/another_demo_source.sqlite`。脚本不会覆盖已有 fixture。默认导入使用仓库内的小样本；可用 `--source` 指向另一份结构相同的 SQLite 文件。
+旧 [小样本](data/fixtures/demo_source.sqlite) 仍保留，供历史 P0/P1 示例测试使用，含 14 条汉堡至巴塞尔航班、3 家巴塞尔酒店和 2 张匿名化演示机票。`scripts/import_demo_data.py` 与 `scripts/seed_p1.py` 只处理该旧样本；**在完整航线数据库上不要运行这两个命令**，否则会把正式演示数据重置回小样本。
+
+可用以下命令核对新样本及两个演示日期：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_network_fixture.py --as-of 2026-10-17 --as-of 2026-11-01
+```
+
+校验器以汉堡—巴塞尔的下午班次为锚，将全部计划/实际时间按同一个绝对时间差平移到演示日附近，并按各起飞机场时区计算未来约 30 天可订的 Scheduled 班次；样本本身保存原始时刻。源文件统一的 `-04:00` 偏移不代表各机场当地时间。若拥有获授权的原虚构库，可用 `scripts/build_network_fixture.py --source <原库路径> --output <新的输出路径>` 重新生成；脚本只读原库并拒绝覆盖已有文件。
+
+如果需要从自己的大型虚构 SQLite 重新生成**旧小样本**，可以运行 `python scripts/build_demo_fixture.py --source travel_new.sqlite --output data/fixtures/another_demo_source.sqlite`。脚本不会覆盖已有 fixture；旧 `import_demo_data.py` 才默认读取小样本，可用其 `--source` 指向结构相同的文件。完整航线默认从 `network_source.sqlite` 导入。
+
+完整航线导入时，只为演示窗口内的 `Scheduled` 班次按稳定算法生成**模拟报价**（以 2026-10-17 为演示日有 15,374 个）；算法 ID 为 `network-fare-v1`，不会读取真实航司价格或让模型定价。改签卡用候选报价减去原订单金额，只展示应补或应退差额；取消卡按原订单金额的 30% 计算模拟取消费、70% 计算模拟应退金额。金额单位为“演示计价单位”，不会发生真实支付或退款。
+
+P2.4c 的酒店和租车产品由 [生成规则](services/city_products.py) 根据可达机场坐标、代码和演示日期产生；相同样本和日期会得到相同 ID、价格与日期窗。巴塞尔 `room-1`～`room-3` 保留，以便两张演示酒店订单继续关联。产品名称、价格及坐标均为**模拟值**，不是供应商信息；坐标只支持近似直线距离，不代表道路距离或通行时间，也没有真实剩余库存。至少一个酒店选项覆盖完整约 30 天演示窗；无产品时搜索返回空列表。每次重新平移演示日期，需要先备份，再通过显式重置命令同时重建航班、报价、酒店、租车和政策；普通服务重启不会重建。若存在待确认动作，重置会拒绝执行。
+
+平台规则见 [虚构政策知识](data/policies/fictional_platform.md)。`GET /api/v1/policies/{scope}` 的 `scope` 为 `flight`、`hotel` 或 `rental`，默认只返回当前规则 ID/版本；旧规则保留用于历史审计。机票新预订按当前模拟报价核算，取消模拟收费 30%；酒店在产品机场当地入住日期前取消，手续费为 0、模拟应退原订单总额；入住当日起不可取消，同日仍可预订或改期。租车按取还车的实际经过时间每开始 24 小时计一个模拟日；原取车前可保持车辆不变修改取还车时间，按新旧总价差额模拟补退且无改期费，也可取消并模拟全额应退；到达原取车时刻后不得改期或取消。内部调用 `create_proposal(db, traveler_id, session_id, "rental_change", {"order_id": "本人订单ID", "expected_version": 1, "pickup_at": "机场当地ISO时间", "dropoff_at": "机场当地ISO时间"})` 创建动作卡，旅客随后通过现有 `/api/v1/sessions/{session_id}/actions/{action_id}/confirm` 逐笔确认。旧 `order_faq.md` 是未使用的历史素材，不作为本平台交易依据。
 
 ## Windows 本机准备
 
@@ -20,33 +36,85 @@
    .\.venv\Scripts\python.exe -m pip install -r requirements.txt
    .\.venv\Scripts\python.exe scripts\init_local_env.py
    docker compose up -d --wait db
-   .\.venv\Scripts\python.exe scripts\import_demo_data.py --apply
+   .\.venv\Scripts\python.exe scripts\migrate.py
+   New-Item -ItemType Directory -Force data/generated | Out-Null
+   $backupName = "travel-before-$(Get-Date -Format yyyyMMdd-HHmmss).dump"
+   docker compose exec -T db pg_dump -U travel_app -d travel_demo -Fc -f "/tmp/$backupName"
+   docker compose cp "db:/tmp/$backupName" "data/generated/$backupName"
+   docker compose exec -T db pg_restore -l "/tmp/$backupName" | Select-Object -Last 5
+   .\.venv\Scripts\python.exe scripts\import_network_data.py --as-of (Get-Date -Format yyyy-MM-dd)
+   .\.venv\Scripts\python.exe scripts\import_network_data.py --as-of (Get-Date -Format yyyy-MM-dd) --apply --reset-demo --backup "data/generated/$backupName"
+   .\.venv\Scripts\python.exe scripts\verify_network_data.py
+   .\.venv\Scripts\python.exe scripts\verify_p1.py
+   .\.venv\Scripts\python.exe scripts\verify_p2_sessions.py
+   .\.venv\Scripts\python.exe scripts\verify_p2_actions.py
+   .\.venv\Scripts\python.exe scripts\verify_p2_confirmations.py
+   .\.venv\Scripts\python.exe scripts\verify_p25_flight_booking.py
+   .\.venv\Scripts\python.exe scripts\verify_p25_rentals.py --phase prepare
+   docker compose restart db
+   .\.venv\Scripts\python.exe scripts\verify_p25_rentals.py --phase finish
+   .\.venv\Scripts\python.exe scripts\verify_p25_rental_changes.py --phase prepare
+   docker compose restart db
+   .\.venv\Scripts\python.exe scripts\verify_p25_rental_changes.py --phase finish
+   .\.venv\Scripts\python.exe scripts\verify_p25_all_actions.py --phase prepare
+   docker compose restart db
+   .\.venv\Scripts\python.exe scripts\verify_p25_all_actions.py --phase finish
+   .\.venv\Scripts\python.exe scripts\verify_p26a_dialogue.py
+   .\.venv\Scripts\python.exe scripts\verify_p26a_restart.py prepare
+   docker compose restart db
+   .\.venv\Scripts\python.exe scripts\verify_p26a_restart.py finish
+   .\.venv\Scripts\python.exe scripts\verify_p26b_dialogue.py prepare
+   docker compose restart db
+   .\.venv\Scripts\python.exe scripts\verify_p26b_dialogue.py finish
    ```
 
-   `.env` 会自动生成随机的本机数据库密码和 JWT 密钥，且已被 Git 忽略。不要把它、真实模型 API 密钥或原始大型 SQLite 文件上传到公开仓库。
+   `.env` 会自动生成随机的本机数据库密码、两名演示账号密码和 JWT 密钥，且已被 Git 忽略。命令中的 `pg_dump` 在首次使用时备份空库，在后续重置时备份旧演示数据；`pg_restore -l` 用于检查备份目录可读。请确认备份文件存在且有内容，再运行带 `--apply --reset-demo` 的命令。备份可能含密码哈希和会话，也已被 Git 忽略，不要分享。不要把 `.env`、模型 API 密钥或原始大型 SQLite 文件上传到公开仓库。
 
 3. 查看导入结果：
 
    ```powershell
-   docker compose exec -T db psql -U travel_app -d travel_demo -c "SELECT count(*) FROM demo_source.flights"
-   docker compose exec -T db psql -U travel_app -d travel_demo -c "SELECT count(*) FROM demo_source.flight_orders"
+   docker compose exec -T db psql -U travel_app -d travel_demo -c "SELECT count(*) FROM flights"
+   docker compose exec -T db psql -U travel_app -d travel_demo -c "SELECT count(*) FROM flight_offers"
+   docker compose exec -T db psql -U travel_app -d travel_demo -c "SELECT as_of FROM demo_state"
    ```
 
-   预期分别为 14 和 2。以 2026-10-17 为演示日期时，一张已有机票与一条候选航班分别在柏林当地 2026-10-18 的 17:43 和 17:58。每次开始新的演示或演示日期变化时，重新运行导入命令即可按当天日期整体平移；一次演示过程中不需重复导入。反复运行导入脚本会在一笔数据库事务中重置 `demo_source` 暂存数据。Docker 的命名数据卷保存 PostgreSQL 数据；`docker compose down` 不会清除该卷。
+   前两条计数在该全航线样本下预期分别为 33,121 和 15,374；第三条是本次重置的演示基准日。`scripts/migrate.py` 同时初始化 LangGraph 的 PostgreSQL 检查点表；升级现有环境时先备份，再重新执行迁移。`verify_network_data.py` 核对机场、航线、报价、时区、酒店/租车覆盖和演示订单；`verify_p1.py` 验证账号隔离与写服务回滚；后续脚本依次验证会话和交易，**不要并行运行这些会修改测试记录的脚本**。租车、八类动作总回归与 P2.6a 数据库重启验收均分两步：`prepare` 留下临时记录，重启数据库后 `finish` 读取并清理。状态文件在 Git 忽略的 `data/generated/` 中；旧交易脚本的状态可能含临时测试密码，勿分享。若中途失败，应先检查并完成清理。以 2026-10-17 为演示日，两班次在次日汉堡当地 17:43 和 17:58。每次开始新的演示或日期变化时，先重新备份并核对现有数据，再显式运行 `import_network_data.py --as-of <新日期> --apply --reset-demo --backup <备份路径>`；它会替换两个演示账号的订单，**清除旧会话、图检查点、轮次、动作、结果与审计以及租车订单**。演示期间不要执行重置。正常启动、停止 API 或数据库不会清除记录。迁移可以重复运行，已应用版本会跳过；Docker 命名卷保留 PostgreSQL 数据，`docker compose down` 不会清除该卷。
 
-4. 启动基础 API：
+4. 启动 API：
 
    ```powershell
    .\.venv\Scripts\python.exe main.py
    ```
 
-   浏览 `http://127.0.0.1:8000/health` 应得到 `{"status":"ok"}`。`/docs` 可打开接口文档。当前旧用户管理和图交易接口默认关闭，因为它们尚未完成旅客身份绑定与逐笔确认；**不要把 `ENABLE_LEGACY_API` 改为 `true` 后对外开放服务**。正式的旅客接口、聊天和订单页面属于后续阶段。
+   浏览 `http://127.0.0.1:8000/health` 应得到 `{"status":"ok"}`，`/docs` 可打开接口文档。用 `.env` 中的 `DEMO_TRAVELER_1_PASSWORD` 和 `DEMO_TRAVELER_2_PASSWORD` 分别登录账号 `demo1`、`demo2`。可在本机 PowerShell 中查看密码：`Select-String -Path .env -Pattern '^DEMO_TRAVELER_[12]_PASSWORD='`；这些是本机演示密码，不要复制到公开仓库或直播画面。
+
+   在 `/docs` 中调用 `POST /api/v1/login`，请求体为 `{"username":"demo1","password":"从 .env 读取的密码"}`。复制响应中的 `access_token`，点页面右上方 **Authorize**，粘贴令牌。随后调用 `GET /api/v1/me`、`GET /api/v1/me/itinerary`；切换到 `demo2` 能看到另一名旅客的订单。航班、酒店、租车产品与规则查询分别为 `GET /api/v1/flights`、`/api/v1/hotels`、`/api/v1/rentals`、`/api/v1/policies/{scope}`。例如以 2026-10-18 为演示基准日，在次日查询 `GET /api/v1/hotels?city=Basel&check_in=2026-10-19&check_out=2026-10-20&airport=BSL&sort=distance&limit=3`，以及 `GET /api/v1/rentals?airport=BSL&pickup_date=2026-10-19&drop_off_date=2026-10-20`；若演示基准日不同，将日期同步改成数据库 `demo_state.as_of` 的次日。酒店支持 `limit`、`offset`、`sort=price|distance`，租车另支持 `city` 与 `max_daily_price`；距离排序须指定机场，超出演示日期窗返回空列表。旧用户管理和图交易接口已不注册。
+
+   会话接口：调用 `POST /api/v1/sessions`，请求体填 `{}`，从结果复制 `id`。模型配置完成后，调用 `POST /api/v1/sessions/{id}/turns`，请求体例如 `{"request_key":"demo-turn-001","content":"机票取消政策是什么？"}`；每个新问题换一个 `request_key`，网络重试同一问题沿用原值。响应的 `answer` 是助手答复，`references` 给出政策规则 ID/版本或候选 ID，`status=completed` 表示该轮已保存。继续用同一会话 ID 和新的请求键提问，就能多轮对话；`GET /api/v1/sessions/{id}` 按顺序读取双方消息，`GET /api/v1/sessions` 列出自己的会话。另一个演示账号访问该 `id` 会得到 404。`POST /messages` 仍可用于尚未开始图对话的旧式手工旅客消息；会话进入 `/turns` 后它返回 409，避免两套历史分叉。请求不能指定旅客 ID、图线程 ID 或伪造助手角色。
+
+   动作接口：`GET /api/v1/sessions/{id}/actions` 列出本人卡片，`GET .../actions/{action_id}` 看详情；`POST .../actions/{action_id}/confirm` 确认一张卡，`POST .../actions/{action_id}/reject` 拒绝一张卡；`GET /api/v1/me/action-history` 查看本人操作事件。确认和拒绝请求无需内容，若在 `/docs` 填请求体，只填 `{}`；旅客 ID、订单、金额等覆盖字段会被拒绝。成功确认返回最新订单与模拟金额；同一动作再次确认返回相同结果，不重复写入。已拒绝、已过期或内容变化返回 409，非本人动作返回 404。航班新预订卡引用正式班次和模拟报价，确认前不新增机票；同一旅客同一班次只保留一张有效票，取消后可重订。租车卡须有产品 ID 和取还车时刻（例如巴塞尔机场当地 `2026-10-19T12:00:00+02:00`），按产品机场的 IANA 时区校验并以 UTC 保存；夏令时重复时刻要带正确偏移，不存在的当地时刻会拒绝。卡片显示当地时刻、日价、计费日数及模拟金额，取消卡显示原额全退；`GET /api/v1/me/itinerary` 包含本人租车订单。
+
+   对话生成卡片：在同一会话用 `/turns` 查询本人行程和模拟候选，明确具体班次、酒店房型或车辆以及所需日期。旅客可以说“把我的机票改签到第二班，并订第一家酒店，2026-10-19 入住一晚”；演示日期应换成当前 `demo_state.as_of` 后的可用日期。若候选或时间仍不明确，响应只有追问和 `actions: []`；补齐信息后用**新的** `request_key` 再发一轮。条件齐备时 `/turns` 返回一到两张 `actions` 待确认卡，各有自己的动作 ID、模拟金额和有效期；此时订单没有变化。先通过 `GET .../actions/{action_id}` 核对最新状态，再对每张卡分别调用 `/confirm` 或 `/reject`。最后调用 `GET /api/v1/me/itinerary` 核对订单。重试同一轮时沿用原 `request_key` 和完全相同的 `content`，返回保存的卡片快照，不会重复建卡；快照可能已过期或被处理，以动作详情为准。两笔需求有一笔不明确时两张卡都不创建；卡片没有真实支付或供应商交易。P2.6e 已修复 P2.6d 发现的高影响对话边界问题，旅客仍须逐张核对确认卡。
 
 ## 模型配置
 
-P0 启动健康检查无需模型密钥，也不会调用模型。后续阶段可通过被忽略的 `.env` 设置 `AI_MODEL`、`AI_API_KEY` 和 `AI_BASE_URL`，分别选择 GPT、DeepSeek 或本地兼容接口。配置有效性和工具调用能力将在 P2 实测；本地模型能聊天不代表它可以安全执行订单工具。Tavily 网页搜索是可选项，未设置 `TAVILY_API_KEY` 时会明确返回未配置。
+健康检查及正式查询/确认 API 无需模型密钥。`/turns` 需要编辑 Git 忽略的 `.env`，设置 `AI_PROVIDER=deepseek`、`AI_MODEL=deepseek-flash`、`AI_BASE_URL=https://api.deepseek.com`、`AI_API_KEY=<你的密钥>`；保存后重启 API，再按上一节通过 `/docs` 测试。不要在聊天、截图或 Git 提交中展示密钥。`AI_PROVIDER` 也允许 `gpt` 或 `local`；本地兼容服务可省略 API 密钥，但仍需模型名和地址。P2.6e 已通过受限真实 DeepSeek 定向复核；详情见《当前进度》。缺少模型配置时 `/turns` 返回 503，其他 API 仍可用。
+
+**经典地点推荐**：旅客可在同一会话询问“推荐 Basel 的经典地点”或“推荐我行程目的地的景点”。服务器先从当前有模拟航班报价的可达城市和本人已确认行程确定范围。功能分支的 [第二版地点目录](data/fixtures/reviewed_places_v2.psv) 含 95 座可达城市、每城 2 个真实地点；[第一版目录](data/fixtures/reviewed_places_v1.psv) 保留用于核对与回滚。不配置搜索密钥也能给出地点的简短介绍。回复正文不附原始链接，API 的 `references` 保留地点 ID、城市／国家代码、来源类别、URL 和审查日期。地点资料审查超过 180 天会停止用于推荐；无匹配主题或不可达城市会明确降级。地点目录不包含实时票价、营业时间或可核实的酒店距离；询问这些信息时明确提示无法核实。
+
+阿里云 CleverSee 国际版 `GlobalBasic` 已有适配器，但当前只用于候选发现或新鲜度检查：即使以后启用，回答仍只会使用人工核查目录中的地点事实，搜索失败会回退目录。**目前保持 `ALIYUN_IQS_ENABLED=false`。**后续需要启用时按以下步骤准备：
+
+1. 在阿里云控制台确认 CleverSee 已开通、`GlobalBasic` 可用以及本账号的计费或试用额度，创建专用于本项目的 **HTTP API Key**。公开计费说明目前未给出该引擎的单价；请以控制台或阿里云支持给出的价格为准，勿套用 `GlobalAdvanced` 的价格。
+2. 在项目根目录的本机 `.env` 新增 `ALIYUN_IQS_API_KEY=<你的密钥>`，保留原有 DeepSeek 和数据库配置。该文件已被 Git 忽略；不要把密钥发到聊天、日志或 GitHub。搜索默认关闭，以免未完成来源质量验收时产生费用。
+3. 保持 `.env` 中的 `ALIYUN_IQS_ENABLED=false`。P2.7e 隔离抽查 18 次发现可利用匹配较少，仍有泛化、打不开的页面；当前建议继续以人工目录为唯一地点事实来源。若以后改善检索质量，再另拟计划评估是否开启联网。`GlobalBasic` 单价在控制台尚未显示，实际费用以服务商账单为准。
+
+当前关闭联网时，每条地点推荐不会调用阿里云搜索。以后开启时每轮至多一次搜索；重复发送同一 `request_key` 和完全相同的内容会读取保存结果。请求不发送旅客账号、订单、酒店或完整对话。外部网页文字不参与交易确认或虚构政策；游览不能预订、改期或取消。目录来源和模型抽测结果见《当前进度》、[地点来源核查记录](docs/enterprise/P2.7d2-地点来源核查记录.md)与 [整体验收记录](docs/enterprise/P2.7e-推荐整体验收记录.md)，实际扣费以服务商账单为准。
 
 ## 当前限制
 
-- `demo_source` 是精选数据的暂存结构，尚未接到新的业务 API；目前不能演示真实的改签／预订闭环。
+P2.6d 在独立隔离数据库发现待确认卡撤回、短序号选班及真实航司政策分流的问题；P2.6e 已修复并以真实 DeepSeek 定向复测。当前仍不承诺公网生产安全或真实供应商交易。模型的口头“同意”不会确认订单；始终通过动作详情核对对象和金额，再由旅客调用对应确认接口。P2.7e 已验收 95 座可达城市的人工目录推荐；实时搜索继续默认关闭，主线发布仍待独立确认。
+
+评估详情在 [当前进度](docs/enterprise/当前进度.md)和 [安全审查](security_best_practices_report.md)。本机 `data/generated/p26d-budget-ledger.json` 与 `p26d-*-report.json` 是 Git 忽略的测试记录，只供本机复核；不要提交或分享可能包含临时账号、会话 ID 的原始报告。P2.6d 隔离数据库项目 `travel-eval` 已停止，正式演示数据库也保持停止。后续任何测试、重置或恢复都先按相应操作计划核对端口、容器项目与备份，避免误改正式演示数据。
+
+- 逐笔确认、事务写入和审计已建立；受控对话可生成九类待确认卡。P2.6e 已定向修复短序号、撤回卡、口头同意与真实航司政策分流。`GlobalBasic` 联网适配器已实现但默认关闭；人工核查目录可在断网时推荐 95 座可达城市，下一步是本机主线与 GitHub 同步计划。
 - 旧代码的第三方密钥曾出现在源码和本地私有配置中。源码引用已移除；若这些密钥仍有效，所有者需要到相应服务后台轮换。

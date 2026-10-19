@@ -14,6 +14,7 @@ config/production.yml
 *.sqlite-wal
 *.sqlite-shm
 !data/fixtures/demo_source.sqlite
+!data/fixtures/network_source.sqlite
 data/generated/
 
 # Python bytecode, caches, and virtual environments

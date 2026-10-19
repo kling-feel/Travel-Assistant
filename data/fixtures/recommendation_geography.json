@@ -1,0 +1,698 @@
+{
+  "source": "IANA zone.tab via tzdata",
+  "tzdata_version": "2026.5",
+  "airport_count": 115,
+  "city_count": 106,
+  "airports": {
+    "ADL": {
+      "city": "Adelaide",
+      "timezone": "Australia/Adelaide",
+      "country_code": "AU",
+      "country": "Australia"
+    },
+    "AKL": {
+      "city": "Auckland",
+      "timezone": "Pacific/Auckland",
+      "country_code": "NZ",
+      "country": "New Zealand"
+    },
+    "AMS": {
+      "city": "Amsterdam",
+      "timezone": "Europe/Amsterdam",
+      "country_code": "NL",
+      "country": "Netherlands"
+    },
+    "ARN": {
+      "city": "Stockholm",
+      "timezone": "Europe/Stockholm",
+      "country_code": "SE",
+      "country": "Sweden"
+    },
+    "ATH": {
+      "city": "Athens",
+      "timezone": "Europe/Athens",
+      "country_code": "GR",
+      "country": "Greece"
+    },
+    "ATL": {
+      "city": "Atlanta",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "BCN": {
+      "city": "Barcelona",
+      "timezone": "Europe/Madrid",
+      "country_code": "ES",
+      "country": "Spain"
+    },
+    "BKK": {
+      "city": "Bangkok",
+      "timezone": "Asia/Bangkok",
+      "country_code": "TH",
+      "country": "Thailand"
+    },
+    "BNE": {
+      "city": "Brisbane",
+      "timezone": "Australia/Brisbane",
+      "country_code": "AU",
+      "country": "Australia"
+    },
+    "BOG": {
+      "city": "Bogotá",
+      "timezone": "America/Bogota",
+      "country_code": "CO",
+      "country": "Colombia"
+    },
+    "BOM": {
+      "city": "Mumbai",
+      "timezone": "Asia/Kolkata",
+      "country_code": "IN",
+      "country": "India"
+    },
+    "BOS": {
+      "city": "Boston",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "BRU": {
+      "city": "Brussels",
+      "timezone": "Europe/Brussels",
+      "country_code": "BE",
+      "country": "Belgium"
+    },
+    "BSL": {
+      "city": "Basel",
+      "timezone": "Europe/Zurich",
+      "country_code": "CH",
+      "country": "Switzerland"
+    },
+    "CAN": {
+      "city": "Guangzhou",
+      "timezone": "Asia/Shanghai",
+      "country_code": "CN",
+      "country": "China"
+    },
+    "CCS": {
+      "city": "Caracas",
+      "timezone": "America/Caracas",
+      "country_code": "VE",
+      "country": "Venezuela"
+    },
+    "CDG": {
+      "city": "Paris",
+      "timezone": "Europe/Paris",
+      "country_code": "FR",
+      "country": "France"
+    },
+    "CEB": {
+      "city": "Cebu",
+      "timezone": "Asia/Manila",
+      "country_code": "PH",
+      "country": "Philippines"
+    },
+    "CGK": {
+      "city": "Jakarta",
+      "timezone": "Asia/Jakarta",
+      "country_code": "ID",
+      "country": "Indonesia"
+    },
+    "CLT": {
+      "city": "Charlotte",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "CPH": {
+      "city": "Copenhagen",
+      "timezone": "Europe/Copenhagen",
+      "country_code": "DK",
+      "country": "Denmark"
+    },
+    "CTU": {
+      "city": "Chengdu",
+      "timezone": "Asia/Shanghai",
+      "country_code": "CN",
+      "country": "China"
+    },
+    "CUN": {
+      "city": "Cancún",
+      "timezone": "America/Cancun",
+      "country_code": "MX",
+      "country": "Mexico"
+    },
+    "DAC": {
+      "city": "Dhaka",
+      "timezone": "Asia/Dhaka",
+      "country_code": "BD",
+      "country": "Bangladesh"
+    },
+    "DCA": {
+      "city": "Washington, D.C.",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "DEL": {
+      "city": "New Delhi",
+      "timezone": "Asia/Kolkata",
+      "country_code": "IN",
+      "country": "India"
+    },
+    "DEN": {
+      "city": "Denver",
+      "timezone": "America/Denver",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "DFW": {
+      "city": "Dallas",
+      "timezone": "America/Chicago",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "DKR": {
+      "city": "Dakar",
+      "timezone": "Africa/Dakar",
+      "country_code": "SN",
+      "country": "Senegal"
+    },
+    "DME": {
+      "city": "Moscow",
+      "timezone": "Europe/Moscow",
+      "country_code": "RU",
+      "country": "Russia"
+    },
+    "DOH": {
+      "city": "Doha",
+      "timezone": "Asia/Qatar",
+      "country_code": "QA",
+      "country": "Qatar"
+    },
+    "DTW": {
+      "city": "Detroit",
+      "timezone": "America/Detroit",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "DUB": {
+      "city": "Dublin",
+      "timezone": "Europe/Dublin",
+      "country_code": "IE",
+      "country": "Ireland"
+    },
+    "DUS": {
+      "city": "Düsseldorf",
+      "timezone": "Europe/Berlin",
+      "country_code": "DE",
+      "country": "Germany"
+    },
+    "DXB": {
+      "city": "Dubai",
+      "timezone": "Asia/Dubai",
+      "country_code": "AE",
+      "country": "United Arab Emirates"
+    },
+    "EDI": {
+      "city": "Edinburgh",
+      "timezone": "Europe/London",
+      "country_code": "GB",
+      "country": "United Kingdom"
+    },
+    "EWR": {
+      "city": "Newark",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "FCO": {
+      "city": "Rome",
+      "timezone": "Europe/Rome",
+      "country_code": "IT",
+      "country": "Italy"
+    },
+    "FRA": {
+      "city": "Frankfurt",
+      "timezone": "Europe/Berlin",
+      "country_code": "DE",
+      "country": "Germany"
+    },
+    "GIG": {
+      "city": "Rio de Janeiro",
+      "timezone": "America/Sao_Paulo",
+      "country_code": "BR",
+      "country": "Brazil"
+    },
+    "GRU": {
+      "city": "São Paulo",
+      "timezone": "America/Sao_Paulo",
+      "country_code": "BR",
+      "country": "Brazil"
+    },
+    "GVA": {
+      "city": "Geneva",
+      "timezone": "Europe/Zurich",
+      "country_code": "CH",
+      "country": "Switzerland"
+    },
+    "HAM": {
+      "city": "Hamburg",
+      "timezone": "Europe/Berlin",
+      "country_code": "DE",
+      "country": "Germany"
+    },
+    "HEL": {
+      "city": "Helsinki",
+      "timezone": "Europe/Helsinki",
+      "country_code": "FI",
+      "country": "Finland"
+    },
+    "HKG": {
+      "city": "Hong Kong",
+      "timezone": "Asia/Hong_Kong",
+      "country_code": "HK",
+      "country": "Hong Kong"
+    },
+    "HKT": {
+      "city": "Phuket",
+      "timezone": "Asia/Bangkok",
+      "country_code": "TH",
+      "country": "Thailand"
+    },
+    "HND": {
+      "city": "Tokyo",
+      "timezone": "Asia/Tokyo",
+      "country_code": "JP",
+      "country": "Japan"
+    },
+    "HNL": {
+      "city": "Honolulu",
+      "timezone": "Pacific/Honolulu",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "HRE": {
+      "city": "Harare",
+      "timezone": "Africa/Harare",
+      "country_code": "ZW",
+      "country": "Zimbabwe"
+    },
+    "IAD": {
+      "city": "Washington, D.C.",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "IAH": {
+      "city": "Houston",
+      "timezone": "America/Chicago",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "ICN": {
+      "city": "Seoul",
+      "timezone": "Asia/Seoul",
+      "country_code": "KR",
+      "country": "South Korea"
+    },
+    "IST": {
+      "city": "Istanbul",
+      "timezone": "Europe/Istanbul",
+      "country_code": "TR",
+      "country": "Turkey"
+    },
+    "JFK": {
+      "city": "New York",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "JNB": {
+      "city": "Johannesburg",
+      "timezone": "Africa/Johannesburg",
+      "country_code": "ZA",
+      "country": "South Africa"
+    },
+    "JRO": {
+      "city": "Arusha",
+      "timezone": "Africa/Dar_es_Salaam",
+      "country_code": "TZ",
+      "country": "Tanzania"
+    },
+    "KMG": {
+      "city": "Kunming",
+      "timezone": "Asia/Shanghai",
+      "country_code": "CN",
+      "country": "China"
+    },
+    "KWI": {
+      "city": "Kuwait City",
+      "timezone": "Asia/Kuwait",
+      "country_code": "KW",
+      "country": "Kuwait"
+    },
+    "LAD": {
+      "city": "Luanda",
+      "timezone": "Africa/Luanda",
+      "country_code": "AO",
+      "country": "Angola"
+    },
+    "LAS": {
+      "city": "Las Vegas",
+      "timezone": "America/Los_Angeles",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "LAX": {
+      "city": "Los Angeles",
+      "timezone": "America/Los_Angeles",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "LGA": {
+      "city": "New York",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "LGW": {
+      "city": "London",
+      "timezone": "Europe/London",
+      "country_code": "GB",
+      "country": "United Kingdom"
+    },
+    "LHR": {
+      "city": "London",
+      "timezone": "Europe/London",
+      "country_code": "GB",
+      "country": "United Kingdom"
+    },
+    "LIM": {
+      "city": "Lima",
+      "timezone": "America/Lima",
+      "country_code": "PE",
+      "country": "Peru"
+    },
+    "LIS": {
+      "city": "Lisbon",
+      "timezone": "Europe/Lisbon",
+      "country_code": "PT",
+      "country": "Portugal"
+    },
+    "MAD": {
+      "city": "Madrid",
+      "timezone": "Europe/Madrid",
+      "country_code": "ES",
+      "country": "Spain"
+    },
+    "MCO": {
+      "city": "Orlando",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "MEL": {
+      "city": "Melbourne",
+      "timezone": "Australia/Melbourne",
+      "country_code": "AU",
+      "country": "Australia"
+    },
+    "MEX": {
+      "city": "Mexico City",
+      "timezone": "America/Mexico_City",
+      "country_code": "MX",
+      "country": "Mexico"
+    },
+    "MIA": {
+      "city": "Miami",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "MNL": {
+      "city": "Manila",
+      "timezone": "Asia/Manila",
+      "country_code": "PH",
+      "country": "Philippines"
+    },
+    "MRS": {
+      "city": "Marseille",
+      "timezone": "Europe/Paris",
+      "country_code": "FR",
+      "country": "France"
+    },
+    "MSP": {
+      "city": "Minneapolis",
+      "timezone": "America/Chicago",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "MUC": {
+      "city": "Munich",
+      "timezone": "Europe/Berlin",
+      "country_code": "DE",
+      "country": "Germany"
+    },
+    "NBO": {
+      "city": "Nairobi",
+      "timezone": "Africa/Nairobi",
+      "country_code": "KE",
+      "country": "Kenya"
+    },
+    "NGO": {
+      "city": "Nagoya",
+      "timezone": "Asia/Tokyo",
+      "country_code": "JP",
+      "country": "Japan"
+    },
+    "NRT": {
+      "city": "Tokyo",
+      "timezone": "Asia/Tokyo",
+      "country_code": "JP",
+      "country": "Japan"
+    },
+    "ORD": {
+      "city": "Chicago",
+      "timezone": "America/Chicago",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "ORY": {
+      "city": "Paris",
+      "timezone": "Europe/Paris",
+      "country_code": "FR",
+      "country": "France"
+    },
+    "OSL": {
+      "city": "Oslo",
+      "timezone": "Europe/Oslo",
+      "country_code": "NO",
+      "country": "Norway"
+    },
+    "PEK": {
+      "city": "Beijing",
+      "timezone": "Asia/Shanghai",
+      "country_code": "CN",
+      "country": "China"
+    },
+    "PEN": {
+      "city": "Penang",
+      "timezone": "Asia/Kuala_Lumpur",
+      "country_code": "MY",
+      "country": "Malaysia"
+    },
+    "PER": {
+      "city": "Perth",
+      "timezone": "Australia/Perth",
+      "country_code": "AU",
+      "country": "Australia"
+    },
+    "PHX": {
+      "city": "Phoenix",
+      "timezone": "America/Phoenix",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "PNH": {
+      "city": "Phnom Penh",
+      "timezone": "Asia/Phnom_Penh",
+      "country_code": "KH",
+      "country": "Cambodia"
+    },
+    "PPT": {
+      "city": "Papeete",
+      "timezone": "Pacific/Tahiti",
+      "country_code": "PF",
+      "country": "French Polynesia"
+    },
+    "PRG": {
+      "city": "Prague",
+      "timezone": "Europe/Prague",
+      "country_code": "CZ",
+      "country": "Czechia"
+    },
+    "PVG": {
+      "city": "Shanghai",
+      "timezone": "Asia/Shanghai",
+      "country_code": "CN",
+      "country": "China"
+    },
+    "REP": {
+      "city": "Siem Reap",
+      "timezone": "Asia/Phnom_Penh",
+      "country_code": "KH",
+      "country": "Cambodia"
+    },
+    "RGN": {
+      "city": "Yangon",
+      "timezone": "Asia/Yangon",
+      "country_code": "MM",
+      "country": "Myanmar"
+    },
+    "RIX": {
+      "city": "Riga",
+      "timezone": "Europe/Riga",
+      "country_code": "LV",
+      "country": "Latvia"
+    },
+    "SAL": {
+      "city": "San Salvador",
+      "timezone": "America/El_Salvador",
+      "country_code": "SV",
+      "country": "El Salvador"
+    },
+    "SAN": {
+      "city": "San Diego",
+      "timezone": "America/Los_Angeles",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "SAW": {
+      "city": "Istanbul",
+      "timezone": "Europe/Istanbul",
+      "country_code": "TR",
+      "country": "Turkey"
+    },
+    "SEA": {
+      "city": "Seattle",
+      "timezone": "America/Los_Angeles",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "SEZ": {
+      "city": "Victoria",
+      "timezone": "Indian/Mahe",
+      "country_code": "SC",
+      "country": "Seychelles"
+    },
+    "SFO": {
+      "city": "San Francisco",
+      "timezone": "America/Los_Angeles",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "SHA": {
+      "city": "Shanghai",
+      "timezone": "Asia/Shanghai",
+      "country_code": "CN",
+      "country": "China"
+    },
+    "SIN": {
+      "city": "Singapore",
+      "timezone": "Asia/Singapore",
+      "country_code": "SG",
+      "country": "Singapore"
+    },
+    "SLC": {
+      "city": "Salt Lake City",
+      "timezone": "America/Denver",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "STN": {
+      "city": "London",
+      "timezone": "Europe/London",
+      "country_code": "GB",
+      "country": "United Kingdom"
+    },
+    "SVO": {
+      "city": "Moscow",
+      "timezone": "Europe/Moscow",
+      "country_code": "RU",
+      "country": "Russia"
+    },
+    "SYD": {
+      "city": "Sydney",
+      "timezone": "Australia/Sydney",
+      "country_code": "AU",
+      "country": "Australia"
+    },
+    "TPA": {
+      "city": "Tampa",
+      "timezone": "America/New_York",
+      "country_code": "US",
+      "country": "United States"
+    },
+    "TPE": {
+      "city": "Taipei",
+      "timezone": "Asia/Taipei",
+      "country_code": "TW",
+      "country": "Taiwan"
+    },
+    "TXL": {
+      "city": "Berlin",
+      "timezone": "Europe/Berlin",
+      "country_code": "DE",
+      "country": "Germany"
+    },
+    "USM": {
+      "city": "Ko Samui",
+      "timezone": "Asia/Bangkok",
+      "country_code": "TH",
+      "country": "Thailand"
+    },
+    "VIE": {
+      "city": "Vienna",
+      "timezone": "Europe/Vienna",
+      "country_code": "AT",
+      "country": "Austria"
+    },
+    "WAW": {
+      "city": "Warsaw",
+      "timezone": "Europe/Warsaw",
+      "country_code": "PL",
+      "country": "Poland"
+    },
+    "YUL": {
+      "city": "Montreal",
+      "timezone": "America/Montreal",
+      "country_code": "CA",
+      "country": "Canada"
+    },
+    "YVR": {
+      "city": "Vancouver",
+      "timezone": "America/Vancouver",
+      "country_code": "CA",
+      "country": "Canada"
+    },
+    "YYC": {
+      "city": "Calgary",
+      "timezone": "America/Edmonton",
+      "country_code": "CA",
+      "country": "Canada"
+    },
+    "YYZ": {
+      "city": "Toronto",
+      "timezone": "America/Toronto",
+      "country_code": "CA",
+      "country": "Canada"
+    },
+    "ZRH": {
+      "city": "Zurich",
+      "timezone": "Europe/Zurich",
+      "country_code": "CH",
+      "country": "Switzerland"
+    }
+  }
+}

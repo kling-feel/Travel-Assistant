@@ -1,0 +1,61 @@
+id|city|country_code|name|aliases|category|intro|url|source_class|reviewed_on
+basel-minster|Basel|CH|Basel Minster|Basler Münster;巴塞尔大教堂|architecture|红砂岩外墙和双塔是巴塞尔的建筑地标。|https://www.basel.com/en/attractions/basler-muenster-bc9d869a33|city_institution|2026-10-19
+basel-history-museum|Basel|CH|Basel Historical Museum|Historisches Museum Basel;巴塞尔历史博物馆|history|馆藏与展览介绍巴塞尔的城市历史。|https://en.wikipedia.org/wiki/Basel_Historical_Museum|encyclopedia|2026-10-19
+paris-louvre|Paris|FR|Louvre Museum|Musée du Louvre;卢浮宫|culture|这座巴黎博物馆展示艺术与历史藏品。|https://en.wikipedia.org/wiki/Louvre|encyclopedia|2026-10-19
+paris-carnavalet|Paris|FR|Musée Carnavalet|Carnavalet Museum;卡纳瓦莱博物馆|history|这座博物馆以巴黎城市历史为主题。|https://www.carnavalet.paris.fr/en/visit|venue_official|2026-10-19
+rome-colosseum|Rome|IT|Colosseum|Flavian Amphitheatre;罗马斗兽场|history|这座古罗马圆形剧场位于罗马市中心。|https://colosseo.it/en/area/colosseo/|venue_official|2026-10-19
+rome-palazzo-massimo|Rome|IT|Palazzo Massimo alle Terme|National Roman Museum of Palazzo Massimo;马西莫宫|history|这处罗马国家博物馆场馆展示考古文物。|https://en.wikipedia.org/wiki/National_Roman_Museum_of_Palazzo_Massimo|encyclopedia|2026-10-19
+london-british-museum|London|GB|British Museum|大英博物馆|history|伦敦的馆藏涵盖多地区的人类历史与文化。|https://en.wikipedia.org/wiki/British_Museum|encyclopedia|2026-10-19
+london-national-gallery|London|GB|National Gallery|伦敦国家美术馆|culture|特拉法加广场的美术馆收藏欧洲绘画。|https://www.nationalgallery.org.uk/visiting|venue_official|2026-10-19
+frankfurt-staedel|Frankfurt|DE|Städel Museum|Städel;施泰德博物馆|culture|这座法兰克福博物馆展示跨越多个世纪的艺术。|https://www.staedelmuseum.de/en/collection-permanent-exhibition|venue_official|2026-10-19
+frankfurt-palmengarten|Frankfurt|DE|Palmengarten|棕榈园|nature|法兰克福的这座植物园适合了解不同植物。|https://www.palmengarten.de/en/gardens/palmengarten.html|venue_official|2026-10-19
+amsterdam-rijksmuseum|Amsterdam|NL|Rijksmuseum|荷兰国立博物馆|history|馆藏呈现荷兰艺术和历史。|https://www.rijksmuseum.nl/en/visit/inside-the-museum|venue_official|2026-10-19
+amsterdam-van-gogh|Amsterdam|NL|Van Gogh Museum|梵高博物馆|culture|阿姆斯特丹的这座博物馆以梵高作品为主题。|https://en.wikipedia.org/wiki/Van_Gogh_Museum|encyclopedia|2026-10-19
+athens-acropolis|Athens|GR|Acropolis of Athens|雅典卫城|history|雅典的古代遗址群汇集了经典建筑。|https://en.wikipedia.org/wiki/Acropolis_of_Athens|encyclopedia|2026-10-19
+athens-acropolis-museum|Athens|GR|Acropolis Museum|卫城博物馆|history|这座雅典博物馆展示卫城遗址出土的文物。|https://www.theacropolismuseum.gr/en|venue_official|2026-10-19
+madrid-prado|Madrid|ES|Prado Museum|Museo del Prado;普拉多博物馆|culture|马德里的艺术博物馆收藏欧洲绘画。|https://en.wikipedia.org/wiki/Museo_del_Prado|encyclopedia|2026-10-19
+madrid-royal-palace|Madrid|ES|Royal Palace of Madrid|马德里王宫|architecture|这座位于马德里的王宫展示宫廷建筑。|https://en.wikipedia.org/wiki/Royal_Palace_of_Madrid|encyclopedia|2026-10-19
+istanbul-hagia-sophia|Istanbul|TR|Hagia Sophia|Ayasofya;圣索菲亚大教堂|architecture|伊斯坦布尔的历史建筑以大型穹顶闻名。|https://en.wikipedia.org/wiki/Hagia_Sophia|encyclopedia|2026-10-19
+istanbul-archaeology-museums|Istanbul|TR|Istanbul Archaeology Museums|伊斯坦布尔考古博物馆|history|这组博物馆展示考古与古代文物。|https://en.wikipedia.org/wiki/Istanbul_Archaeological_Museums|encyclopedia|2026-10-19
+copenhagen-national-museum|Copenhagen|DK|National Museum of Denmark|丹麦国家博物馆|history|哥本哈根的国家博物馆展示丹麦历史与文化。|https://nationalmuseet.dk/en?force=desktop|venue_official|2026-10-20
+copenhagen-rosenborg|Copenhagen|DK|Rosenborg Castle|罗森堡城堡|architecture|这座哥本哈根城堡可了解丹麦王室建筑。|https://denkongeligesamling.dk/en/rosenborg-castle|venue_official|2026-10-19
+oslo-munch|Oslo|NO|Munch Museum|MUNCH;蒙克博物馆|culture|奥斯陆的博物馆以蒙克艺术为主题。|https://www.munch.no/en|venue_official|2026-10-20
+oslo-opera|Oslo|NO|Oslo Opera House|奥斯陆歌剧院|architecture|奥斯陆海滨的歌剧院是现代公共建筑。|https://www.operaen.no/en/about-us-oslo-operahouse/about-the-oslo-opera-house/|venue_official|2026-10-20
+beijing-forbidden-city|Beijing|CN|Forbidden City|故宫;紫禁城|history|北京的宫殿建筑群承载明清宫廷历史。|https://english.beijing.gov.cn/beijinginfo/culture/culturaltreasures/sevenculture/202401/t20240111_3532664.html|city_institution|2026-10-20
+beijing-temple-of-heaven|Beijing|CN|Temple of Heaven|天坛|architecture|北京的历史祭祀建筑群以祈年殿闻名。|https://en.wikipedia.org/wiki/Temple_of_Heaven|encyclopedia|2026-10-19
+shanghai-museum|Shanghai|CN|Shanghai Museum|上海博物馆|history|上海的博物馆收藏中国历史文物。|https://www.shanghaimuseum.cn/mu/frontend/pg/en/index|venue_official|2026-10-20
+shanghai-yu-garden|Shanghai|CN|Yu Garden|豫园|nature|上海老城的古典园林可了解传统园林布局。|https://en.wikipedia.org/wiki/Yu_Garden|encyclopedia|2026-10-19
+guangzhou-chen-clan|Guangzhou|CN|Chen Clan Ancestral Hall|陈家祠|architecture|广州的祠堂建筑展示岭南装饰艺术。|https://en.wikipedia.org/wiki/Chen_Clan_Ancestral_Hall|encyclopedia|2026-10-19
+guangzhou-nanyue|Guangzhou|CN|Museum of the Mausoleum of the Nanyue King|南越王博物馆|history|广州的考古博物馆介绍南越国遗址与文物。|https://en.wikipedia.org/wiki/Museum_of_the_Mausoleum_of_the_Nanyue_King|encyclopedia|2026-10-19
+chengdu-jinsha|Chengdu|CN|Jinsha Site Museum|金沙遗址博物馆|history|成都的遗址博物馆展示古蜀文明。|https://www.jinshasitemuseum.com/site-75/node/287|venue_official|2026-10-19
+chengdu-museum|Chengdu|CN|Chengdu Museum|成都博物馆|history|这座城市博物馆展示成都历史文物。|https://en.wikipedia.org/wiki/Chengdu_Museum|encyclopedia|2026-10-19
+hong-kong-history-museum|Hong Kong|HK|Hong Kong Museum of History|香港历史博物馆|history|九龙的博物馆介绍香港历史。|https://hk.history.museum/en/web/mh/about-us/introduction.html|venue_official|2026-10-20
+hong-kong-palace-museum|Hong Kong|HK|Hong Kong Palace Museum|香港故宫文化博物馆|culture|西九文化区的博物馆展示中国艺术与文化。|https://en.wikipedia.org/wiki/Hong_Kong_Palace_Museum|encyclopedia|2026-10-19
+tokyo-national-museum|Tokyo|JP|Tokyo National Museum|东京国立博物馆|history|上野的博物馆展示日本和亚洲文化遗产。|https://www.gotokyo.org/en/spot/123/index.html|city_institution|2026-10-20
+tokyo-sensoji|Tokyo|JP|Sensō-ji|Senso-ji;浅草寺|architecture|东京浅草的寺院以传统建筑为特色。|https://en.wikipedia.org/wiki/Sens%C5%8D-ji|encyclopedia|2026-10-19
+seoul-gyeongbokgung|Seoul|KR|Gyeongbokgung|景福宫|history|首尔的朝鲜王朝宫殿可了解王室历史。|https://english.visitkorea.or.kr/svc/contents/rmsCsulView.do?menuSn=958&vcontsId=219716|city_institution|2026-10-19
+seoul-national-museum|Seoul|KR|National Museum of Korea|韩国国立中央博物馆|history|首尔的国家博物馆展示韩国历史与艺术。|https://www.museum.go.kr/ENG/main/index.do|venue_official|2026-10-20
+singapore-national-gallery|Singapore|SG|National Gallery Singapore|新加坡国家美术馆|culture|这座美术馆展示新加坡及东南亚艺术。|https://www.nationalgallery.sg/sg/en.html|venue_official|2026-10-20
+singapore-gardens|Singapore|SG|Gardens by the Bay|滨海湾花园|nature|滨海湾的城市花园展示园艺景观。|https://www.gardensbythebay.com.sg/|venue_official|2026-10-20
+bangkok-grand-palace|Bangkok|TH|Grand Palace|曼谷大皇宫|architecture|曼谷的宫殿群展示泰国王室建筑。|https://www.tourismthailand.org/Attraction/the-grand-palace|city_institution|2026-10-20
+bangkok-wat-pho|Bangkok|TH|Wat Pho|卧佛寺|history|曼谷的历史寺院以卧佛像闻名。|https://en.wikipedia.org/wiki/Wat_Pho|encyclopedia|2026-10-19
+dubai-etihad-museum|Dubai|AE|Etihad Museum|联合博物馆|history|迪拜的博物馆介绍阿联酋建国历史。|https://en.wikipedia.org/wiki/Etihad_Museum|encyclopedia|2026-10-20
+dubai-frame|Dubai|AE|Dubai Frame|迪拜相框|architecture|迪拜的框形观景建筑是一处城市地标。|https://www.dm.gov.ae/projects/dubai-frame/|city_institution|2026-10-20
+jakarta-national-museum|Jakarta|ID|National Museum of Indonesia|印尼国家博物馆|history|雅加达的国家博物馆展示印度尼西亚文化遗产。|https://en.wikipedia.org/wiki/National_Museum_of_Indonesia|encyclopedia|2026-10-19
+jakarta-history-museum|Jakarta|ID|Jakarta History Museum|雅加达历史博物馆|history|老城的博物馆介绍雅加达城市历史。|https://en.wikipedia.org/wiki/Jakarta_History_Museum|encyclopedia|2026-10-19
+manila-fine-arts|Manila|PH|National Museum of Fine Arts|菲律宾国家美术馆|culture|马尼拉的美术馆展示菲律宾艺术。|https://en.wikipedia.org/wiki/National_Museum_of_Fine_Arts_%28Manila%29|encyclopedia|2026-10-19
+manila-fort-santiago|Manila|PH|Fort Santiago|圣地亚哥堡|history|王城内的历史要塞与马尼拉殖民时期历史相关。|https://en.wikipedia.org/wiki/Fort_Santiago|encyclopedia|2026-10-19
+new-york-met|New York|US|Metropolitan Museum of Art|The Met;大都会艺术博物馆|culture|纽约的艺术博物馆收藏跨地区与年代的作品。|https://www.metmuseum.org/plan-your-visit|venue_official|2026-10-20
+new-york-central-park|New York|US|Central Park|中央公园|nature|曼哈顿的城市公园适合步行休憩。|https://www.centralparknyc.org/ABOUT|venue_official|2026-10-20
+los-angeles-getty|Los Angeles|US|Getty Center|盖蒂中心|culture|洛杉矶的艺术中心展示收藏与建筑景观。|https://www.getty.edu/visit/center/top-things-to-do/|venue_official|2026-10-20
+los-angeles-griffith|Los Angeles|US|Griffith Observatory|格里菲斯天文台|culture|洛杉矶的天文台提供天文科普展示。|https://griffithobservatory.lacity.gov/about/|city_institution|2026-10-20
+san-francisco-de-young|San Francisco|US|de Young Museum|笛洋美术馆|culture|旧金山的美术馆展示多地区艺术收藏。|https://en.wikipedia.org/wiki/De_Young_Museum|encyclopedia|2026-10-19
+san-francisco-golden-gate-park|San Francisco|US|Golden Gate Park|金门公园|nature|旧金山的大型城市公园包含步行与园艺空间。|https://sfrecpark.org/1868/Golden-Gate-Park-Gardens|city_institution|2026-10-20
+chicago-art-institute|Chicago|US|Art Institute of Chicago|芝加哥艺术博物馆|culture|芝加哥的美术馆收藏不同年代的艺术品。|https://en.wikipedia.org/wiki/Art_Institute_of_Chicago|encyclopedia|2026-10-19
+chicago-millennium-park|Chicago|US|Millennium Park|千禧公园|nature|芝加哥市中心的公共公园结合艺术与绿地。|https://www.choosechicago.com/listing/millennium-park-2/|city_institution|2026-10-20
+sao-paulo-masp|São Paulo|BR|São Paulo Museum of Art|MASP;圣保罗艺术博物馆|culture|保利斯塔大道的美术馆收藏艺术作品。|https://en.wikipedia.org/wiki/S%C3%A3o_Paulo_Museum_of_Art|encyclopedia|2026-10-19
+sao-paulo-ibirapuera|São Paulo|BR|Ibirapuera Park|伊比拉普埃拉公园|nature|圣保罗的城市公园融合绿地和文化设施。|https://en.wikipedia.org/wiki/Ibirapuera_Park|encyclopedia|2026-10-19
+sydney-opera-house|Sydney|AU|Sydney Opera House|悉尼歌剧院|architecture|海港边的表演艺术建筑是悉尼地标。|https://en.wikipedia.org/wiki/Sydney_Opera_House|encyclopedia|2026-10-19
+sydney-botanic-garden|Sydney|AU|Royal Botanic Garden Sydney|悉尼皇家植物园|nature|悉尼的植物园展示园艺与植物景观。|https://en.wikipedia.org/wiki/Royal_Botanic_Garden%2C_Sydney|encyclopedia|2026-10-19
+nairobi-national-museum|Nairobi|KE|Nairobi National Museum|内罗毕国家博物馆|history|这座博物馆展示肯尼亚文化与自然遗产。|https://nmk.go.ke/nairobi-national-museum/|venue_official|2026-10-19
+nairobi-archives|Nairobi|KE|Kenya National Archives|肯尼亚国家档案馆|history|内罗毕市中心的档案馆保存肯尼亚历史记录。|https://en.wikipedia.org/wiki/Kenya_National_Archives|encyclopedia|2026-10-19

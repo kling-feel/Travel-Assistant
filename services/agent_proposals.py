@@ -1,0 +1,192 @@
+"""Resolve model transaction suggestions against owned orders and shown candidates."""
+
+import re
+from datetime import date, timedelta
+
+from sqlalchemy import select
+
+from db.travel_models import (chat_turns, flight_orders, hotel_orders,
+                              rental_orders)
+from services.actions import FIELDS
+
+
+class SelectionNeeded(ValueError):
+    """The traveler must clarify a target before any card is created."""
+
+
+ORDER_TABLES = {"flight": flight_orders, "hotel": hotel_orders,
+                "rental": rental_orders}
+PRODUCT_TYPES = {"flight": "flight", "hotel": "hotel_product",
+                 "rental": "rental_product"}
+PRODUCT_KEYS = {"flight": "flight_id", "hotel": "product_id",
+                "rental": "product_id"}
+ORDINALS = {"一": 0, "二": 1, "三": 2, "1": 0, "2": 1, "3": 2}
+
+
+def recent_references(db, session_id, current=()):
+    rows = db.execute(select(chat_turns.c.references).where(
+        chat_turns.c.session_id == session_id,
+        chat_turns.c.status == "completed",
+    ).order_by(chat_turns.c.started_at.desc()).limit(4)).scalars().all()
+    return [list(current)] + [row or [] for row in rows]
+
+
+def _shown(groups, reference_type):
+    for group in groups:
+        candidates = [item for item in group if isinstance(item, dict)
+                      and item.get("type") == reference_type]
+        if candidates:
+            return candidates
+    return []
+
+
+def _ordinal(text, kind):
+    noun = {"flight": "航班|班机|班次", "hotel": "酒店|房间|房型",
+            "rental": "租车|车辆|车"}[kind]
+    match = re.search(rf"第\s*([一二三123])\s*(?:个\s*)?(?:{noun}|班|家|辆|个)", text)
+    return ORDINALS[match.group(1)] if match else None
+
+
+def _explicit_id(text, kind, candidate_id):
+    if kind == "flight":
+        return re.search(rf"(?:SIM-|航班\s*ID\s*[:：]?\s*){candidate_id}\b",
+                         text, re.IGNORECASE) is not None
+    return isinstance(candidate_id, str) and len(candidate_id) > 5 and candidate_id in text
+
+
+def _product_choice(kind, proposed, groups, text):
+    candidates = _shown(groups, PRODUCT_TYPES[kind])
+    if not candidates:
+        if proposed is not None and _explicit_id(text, kind, proposed):
+            return proposed
+        raise SelectionNeeded("请先查询并明确选择具体模拟候选。")
+    ids = [item["id"] for item in candidates]
+    if proposed is not None and proposed not in ids:
+        raise SelectionNeeded("该产品不在当前候选中，请重新查询并选择。")
+    ordinal = _ordinal(text, kind)
+    if ordinal is not None:
+        if ordinal >= len(ids):
+            raise SelectionNeeded("所选序号不在当前候选中，请重新选择。")
+        choice = ids[ordinal]
+    elif len(ids) == 1:
+        choice = ids[0]
+    elif "最便宜" in text:
+        priced = [item for item in candidates if type(item.get("price")) in (int, float)]
+        if len(priced) != len(candidates):
+            raise SelectionNeeded("候选价格不完整，请指定具体产品。")
+        choice = min(priced, key=lambda item: (item["price"], str(item["id"])))['id']
+    elif kind == "hotel" and ("最近" in text or "距离最近" in text):
+        located = [item for item in candidates if item.get("distance_km") is not None]
+        if len(located) != len(candidates):
+            raise SelectionNeeded("酒店距离缺少可靠坐标，请指定具体产品。")
+        choice = min(located, key=lambda item: (item["distance_km"], str(item["id"])))['id']
+    elif proposed is not None and _explicit_id(text, kind, proposed):
+        choice = proposed
+    else:
+        raise SelectionNeeded("有多个模拟候选，请明确选择班次或产品。")
+    if proposed is not None and str(proposed) != str(choice):
+        raise SelectionNeeded("所选候选与请求不一致，请重新指定。")
+    return choice
+
+
+def _owned_order(db, traveler_id, kind, proposed, text):
+    table = ORDER_TABLES[kind]
+    rows = db.execute(select(table).where(
+        table.c.traveler_id == traveler_id, table.c.status == "confirmed",
+    )).mappings().all()
+    if proposed is not None:
+        matched = [row for row in rows if row["id"] == proposed]
+        if not matched:
+            raise SelectionNeeded("未找到可办理的本人订单，请查看行程并指定订单。")
+        if len(rows) > 1 and proposed not in text:
+            raise SelectionNeeded("本人有多笔有效订单，请明确指出要办理的订单。")
+        return matched[0]
+    if len(rows) == 1:
+        return rows[0]
+    if not rows:
+        raise SelectionNeeded("本人没有可办理的有效订单。")
+    raise SelectionNeeded("本人有多笔有效订单，请明确指出要办理的订单。")
+
+
+def _date_grounded(value, text, today):
+    try:
+        target = date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return False
+    if value in text or f"{target.year}年{target.month}月{target.day}日" in text:
+        return True
+    if f"{target.month}月{target.day}日" in text:
+        return True
+    for word, days in (("今天", 0), ("明天", 1), ("后天", 2)):
+        if word in text and target == today + timedelta(days=days):
+            return True
+    return False
+
+
+def _dates_grounded(action_type, params, text, today):
+    if action_type.startswith("hotel_") and action_type != "hotel_cancel":
+        start, end = params.get("check_in"), params.get("check_out")
+        if not _date_grounded(start, text, today):
+            return False
+        if _date_grounded(end, text, today):
+            return True
+        try:
+            return ("一晚" in text and date.fromisoformat(end)
+                    == date.fromisoformat(start) + timedelta(days=1))
+        except (TypeError, ValueError):
+            return False
+    if action_type.startswith("rental_") and action_type != "rental_cancel":
+        for field in ("pickup_at", "dropoff_at"):
+            value = params.get(field)
+            if not isinstance(value, str) or "T" not in value:
+                return False
+            day, time = value.split("T", 1)
+            if not _date_grounded(day, text, today):
+                return False
+            hour, minute = time[:2], time[3:5]
+            if not hour.isdigit() or not minute.isdigit():
+                return False
+            clock = (time[:5] in text or f"{int(hour)}点{int(minute)}" in text
+                     or (minute == "00" and f"{int(hour)}点" in text))
+            if not clock:
+                return False
+    return True
+
+
+def prepare_actions(db, traveler_id, plans, references, user_text,
+                    context_text=None, today=None):
+    if not isinstance(plans, list) or not 1 <= len(plans) <= 2:
+        raise SelectionNeeded("请说明要办理的一到两笔具体交易。")
+    if re.search(r"改签.+(?:并|同时|再).*(?:订|预订).*(?:酒店|房)", user_text):
+        if {item.get("action_type") for item in plans if isinstance(item, dict)} != {
+                "flight_change", "hotel_book"}:
+            raise SelectionNeeded("机票改签和酒店预订需同时明确，才能一起生成两张待确认卡。")
+    context_text = context_text or user_text
+    resolved = []
+    for item in plans:
+        if not isinstance(item, dict) or set(item) != {"action_type", "parameters"}:
+            raise SelectionNeeded("交易内容不完整，请重新说明需求。")
+        action_type, params = item["action_type"], item["parameters"]
+        if action_type not in FIELDS or not isinstance(params, dict):
+            raise SelectionNeeded("该交易类型暂不可用。")
+        if set(params) - FIELDS[action_type]:
+            raise SelectionNeeded("交易参数包含未核实的字段，请重新说明需求。")
+        if today is not None and not _dates_grounded(action_type, params,
+                                                     context_text, today):
+            raise SelectionNeeded("请明确酒店日期或租车的取还车日期和当地时刻。")
+        params = dict(params)
+        kind, operation = action_type.split("_", 1)
+        if operation in ("change", "cancel"):
+            order = _owned_order(db, traveler_id, kind, params.get("order_id"), user_text)
+            params["order_id"] = order["id"]
+            params["expected_version"] = order["version"]
+        if operation == "book" or (kind in ("flight", "hotel") and operation == "change"):
+            key = "new_flight_id" if action_type == "flight_change" else PRODUCT_KEYS[kind]
+            if action_type == "hotel_change" and params.get(key) is None:
+                params[key] = order["product_id"]
+            else:
+                params[key] = _product_choice(kind, params.get(key), references, user_text)
+        if set(params) != FIELDS[action_type]:
+            raise SelectionNeeded("交易日期、时刻或产品信息不完整，请补充后再生成确认卡。")
+        resolved.append((action_type, params))
+    return resolved
