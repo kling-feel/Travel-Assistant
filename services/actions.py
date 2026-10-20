@@ -202,7 +202,7 @@ def _quote(db, traveler_id, action_type, params, now):
         if old_flight["status"] != "Scheduled" or _utc(old_flight["departure_at"]) <= now:
             raise ActionError("flight no longer available")
         before = {"order_id": order["id"], "status": order["status"],
-                  "amount": order["amount"], **_flight_snapshot(old_flight)}
+                  "amount": order["amount"], **_flight_local_snapshot(db, old_flight)}
         if action_type == "flight_cancel":
             fee = cancellation_fee(order["amount"])
             after = {**before, "status": "cancelled"}
@@ -221,7 +221,7 @@ def _quote(db, traveler_id, action_type, params, now):
         offer = _offer(db, new["id"])
         difference = offer["amount"] - order["amount"]
         after = {"order_id": order["id"], "status": "confirmed",
-                 "amount": offer["amount"], **_flight_snapshot(new)}
+                 "amount": offer["amount"], **_flight_local_snapshot(db, new)}
         price = {"old_amount": order["amount"], "new_amount": offer["amount"],
                  "difference": difference, "payable": max(difference, 0),
                  "refundable": max(-difference, 0), "cancellation_fee": 0}

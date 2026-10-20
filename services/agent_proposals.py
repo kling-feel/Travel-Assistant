@@ -41,9 +41,9 @@ def _shown(groups, reference_type):
 
 
 def _ordinal(text, kind):
-    noun = {"flight": "航班|班机|班次", "hotel": "酒店|房间|房型",
-            "rental": "租车|车辆|车"}[kind]
-    match = re.search(rf"第\s*([一二三123])\s*(?:个\s*)?(?:{noun}|班|家|辆|个)", text)
+    noun = {"flight": "航班|班机|班次|班", "hotel": "酒店|房间|房型|家",
+            "rental": "租车|车辆|车|辆"}[kind]
+    match = re.search(rf"第\s*([一二三123])\s*(?:个\s*)?(?:{noun}|个)", text)
     return ORDINALS[match.group(1)] if match else None
 
 

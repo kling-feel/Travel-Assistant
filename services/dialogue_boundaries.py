@@ -20,6 +20,10 @@ EXTERNAL_SOURCE = re.compile(
 )
 CARD_WORDS = re.compile(r"卡片?|待确认|提案|刚才|上面|上一张|这张|这些|两张")
 WITHDRAW_WORDS = re.compile(r"撤回|拒绝|不执行|不要执行|先不订|不订了|不订|不办理|作废")
+CARD_CANCEL = re.compile(
+    r"取消(?:刚才的?|上面的?|这张|这些|两张|所有|该)?(?:待确认)?(?:卡片?|提案)|"
+    r"(?:卡片?|待确认卡|提案)(?:先)?(?:取消|撤销)"
+)
 APPROVE_WORDS = re.compile(r"我同意|同意了|直接付款|替我点确认|帮我点确认|确认上面|确认这张|确认刚才")
 
 
@@ -27,7 +31,7 @@ def boundary_intent(text):
     """Return a guarded intent, or None for ordinary model routing."""
     card_reference = CARD_WORDS.search(text)
     if ((card_reference and WITHDRAW_WORDS.search(text)) or
-            (re.search(r"卡片?|待确认|提案", text) and "取消" in text) or
+            CARD_CANCEL.search(text) or
             re.search(r"先不订|不订了", text)):
         return "withdraw"
     if APPROVE_WORDS.search(text):

@@ -111,6 +111,16 @@ def me(traveler=Depends(current_traveler)):
             "display_name": traveler["display_name"]}
 
 
+@router.get("/demo-state")
+def current_demo_state(traveler=Depends(current_traveler),
+                       session: Session = Depends(get_db)):
+    as_of = demo_date(session)
+    return {"as_of": as_of, "bookable_from": as_of + timedelta(days=1),
+            "bookable_until": as_of + timedelta(days=30),
+            "hotel_checkout_until": as_of + timedelta(days=31),
+            "simulation_notice": "虚构平台与模拟数据；不连接真实供应商或付款"}
+
+
 @router.get("/me/itinerary")
 def my_itinerary(traveler=Depends(current_traveler),
                  session: Session = Depends(get_db)):

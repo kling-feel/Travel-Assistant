@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>旅程助手 · 演示平台</title>
+  <link rel="icon" type="image/svg+xml" href="/static/mark.svg">
+  <link rel="stylesheet" href="/static/app.css?v=4">
+  <script src="/static/app.js?v=4" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="mark" aria-hidden="true">✦</span><div><strong>旅程助手</strong><small>TRAVEL DESK · DEMO</small></div></div>
+    <div class="topright"><span id="identity" class="identity"></span><button id="logout" type="button" class="quiet" hidden>退出登录</button></div>
+  </header>
+  <main>
+    <section id="login-view" class="login-layout" aria-labelledby="login-title">
+      <div class="intro"><span class="eyebrow">YOUR JOURNEY, IN ONE PLACE</span><h1>下一段旅程，<br><em>从这里开始。</em></h1><p>用对话安排航班、酒店和租车。所有价格、订单和确认均为虚构演示，不会产生真实预订或付款。</p><div class="intro-line"><span>01 · 查询</span><span>02 · 核对</span><span>03 · 逐笔确认</span></div></div>
+      <form id="login-form" class="login-card"><span class="eyebrow">演示账号登录</span><h2 id="login-title">欢迎回来</h2><p>使用本机环境文件中的演示账号密码。</p><label for="username">账号</label><input id="username" name="username" type="text" autocomplete="username" required maxlength="80" placeholder="demo1"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="演示账号密码"><button id="login-button" class="primary" type="submit">进入旅程 <span aria-hidden="true">↗</span></button><p id="login-message" class="form-message" role="alert"></p></form>
+    </section>
+    <section id="workspace" class="workspace" hidden aria-label="旅客工作台">
+      <div class="workspace-head"><div><span class="eyebrow">TRAVEL WORKSPACE</span><h1>我的旅程</h1><p id="demo-window" class="subtle"></p></div><div class="simulation-tag">虚构平台 · 模拟交易 · 无真实付款</div></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <nav class="tabs" aria-label="工作台区域"><button type="button" class="tab active" data-panel="conversation">对话助手</button><button type="button" class="tab" data-panel="search">查询候选</button><button type="button" class="tab" data-panel="itinerary">我的行程</button><button type="button" class="tab" data-panel="history">操作记录</button></nav>
+      <section id="conversation" class="panel conversation-layout" aria-label="对话助手">
+        <aside class="sessions"><div class="section-title"><h2>会话</h2><button id="new-session" type="button" class="small-button">＋ 新建</button></div><div id="session-list" class="session-list"></div></aside>
+        <div class="chat-card"><div class="chat-head"><div><span class="live-dot" aria-hidden="true"></span><strong>旅行助手</strong><small id="session-label">选择或新建会话</small></div><span>多轮对话</span></div><div id="messages" class="messages" aria-live="polite"><div class="empty">登录后选择会话，告诉我你的旅行计划。</div></div><form id="chat-form" class="composer"><label class="sr-only" for="chat-input">发送消息</label><textarea id="chat-input" rows="2" maxlength="4000" placeholder="例如：把明天下午的航班改签到第二班，再订一晚附近酒店" required></textarea><div class="composer-bottom"><span>交易需核对卡片后逐笔确认</span><div><button id="retry-turn" type="button" class="small-button" hidden>重试本轮</button><button id="send-button" class="primary compact" type="submit">发送 ↗</button></div></div></form></div>
+        <aside class="actions"><div class="section-title"><h2>待确认与动作</h2><button id="refresh-actions" type="button" class="text-button">刷新</button></div><p class="subtle">每张卡片单独核对。未确认的动作不会修改订单。</p><div id="action-list" class="action-list"></div></aside>
+      </section>
+      <section id="search" class="panel" hidden aria-label="查询候选"><div class="section-title"><div><span class="eyebrow">EXPLORE</span><h2>查询候选</h2></div></div><p class="subtle">这里只读展示模拟供给。要预订或修改，请在对话中说出具体候选和日期。</p><div class="search-grid"><form id="flight-form" class="search-card"><h3>航班</h3><label for="flight-from">出发机场代码</label><input id="flight-from" name="departure" maxlength="8" placeholder="HAM" required><label for="flight-to">到达机场代码</label><input id="flight-to" name="arrival" maxlength="8" placeholder="BSL" required><label for="flight-date">出发日期</label><input id="flight-date" name="travel_date" type="date" required><button class="secondary" type="submit">查询航班</button></form><form id="hotel-form" class="search-card"><h3>酒店</h3><label for="hotel-city">城市英文名</label><input id="hotel-city" name="city" placeholder="Basel" required><label for="hotel-airport">机场代码（可选）</label><input id="hotel-airport" name="airport" maxlength="8" placeholder="BSL"><div class="two-fields"><div><label for="check-in">入住</label><input id="check-in" name="check_in" type="date" required></div><div><label for="check-out">退房</label><input id="check-out" name="check_out" type="date" required></div></div><button class="secondary" type="submit">查询酒店</button></form><form id="rental-form" class="search-card"><h3>租车</h3><label for="rental-airport">取车机场代码</label><input id="rental-airport" name="airport" maxlength="8" placeholder="BSL" required><div class="two-fields"><div><label for="pickup-date">取车日期</label><input id="pickup-date" name="pickup_date" type="date" required></div><div><label for="dropoff-date">还车日期</label><input id="dropoff-date" name="drop_off_date" type="date" required></div></div><button class="secondary" type="submit">查询车辆</button></form></div><div id="search-results" class="result-list" aria-live="polite"></div></section>
+      <section id="itinerary" class="panel" hidden aria-label="我的行程"><div class="section-title"><div><span class="eyebrow">MY TRIP</span><h2>我的行程</h2></div><button id="refresh-itinerary" type="button" class="text-button">刷新</button></div><div id="itinerary-list" class="result-list"></div></section>
+      <section id="history" class="panel" hidden aria-label="操作记录"><div class="section-title"><div><span class="eyebrow">ACTIVITY</span><h2>操作记录</h2></div><button id="refresh-history" type="button" class="text-button">刷新</button></div><div id="history-list" class="result-list"></div></section>
+    </section>
+  </main>
+  <dialog id="action-dialog" aria-labelledby="dialog-title"><form method="dialog" class="dialog-card"><span class="eyebrow">逐笔核对</span><h2 id="dialog-title">核对动作</h2><div id="dialog-details"></div><p id="dialog-warning" class="dialog-warning"></p><div class="dialog-buttons"><button id="dialog-close" type="button" class="quiet">返回</button><button id="dialog-submit" type="button" class="primary">确认</button></div></form></dialog>
+</body>
+</html>

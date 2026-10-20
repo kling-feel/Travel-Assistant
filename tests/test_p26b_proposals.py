@@ -18,6 +18,8 @@ class ProposalSelectionTests(unittest.TestCase):
         for phrase in ("第二班", "第 2 班", "第二班航班", "第二个"):
             self.assertEqual(_ordinal(phrase, "flight"), 1)
             self.assertEqual(_product_choice("flight", None, shown, phrase), 22)
+        self.assertEqual(_ordinal("改签到第二班，并订第一家酒店", "flight"), 1)
+        self.assertEqual(_ordinal("改签到第二班，并订第一家酒店", "hotel"), 0)
         with self.assertRaises(SelectionNeeded):
             _product_choice("flight", 11, shown, "第 2 班")
         with self.assertRaises(SelectionNeeded):
