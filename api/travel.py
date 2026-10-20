@@ -1,5 +1,6 @@
 """P1 traveler API. Client input never selects a traveler account."""
 
+import re
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid5
 
@@ -29,6 +30,8 @@ from services.chat_turns import (TurnConflict, _public as public_turn, begin_tur
                                  lock_processing_turn)
 from services.agent_proposals import (SelectionNeeded, prepare_actions,
                                       recent_references)
+from services.agent_feedback import (cancellation_overview, explain_action_error,
+                                     explain_selection_needed)
 from services.checkpoints import open_checkpointer
 from services.model_config import ModelUnavailable, get_chat_model
 from services.recommendations import (get_recommendation_provider,
@@ -310,6 +313,13 @@ def conversation_turn(session_id: str, data: TurnRequest,
             raise ValueError("invalid graph result")
         actions = []
         plans = result.get("transaction_plan") or []
+        mass_cancel = ("取消" in content and bool(re.search(r"所有|全部", content))
+                       and "机票" in content and "酒店" in content)
+        overview = ""
+        if mass_cancel:
+            with Session(bind=bind) as read_db:
+                overview, plans = cancellation_overview(read_db, traveler["id"])
+            answer, references = overview, []
         if plans:
             try:
                 lock_processing_turn(session, traveler["id"], session_id, turn["id"])
@@ -327,13 +337,21 @@ def conversation_turn(session_id: str, data: TurnRequest,
                     actions.append(jsonable_encoder(card))
                 references = references + [{"type": "action", "id": card["id"]}
                                            for card in actions]
-                answer = (f"已生成 {len(actions)} 张待确认卡。"
+                answer = (overview + "\n" if overview else "") + (
+                          f"已生成 {len(actions)} 张待确认卡。"
                           "请逐张核对对象、时间、金额和政策，并通过对应动作接口确认或拒绝；"
                           "目前订单尚未改变。")
             except (SelectionNeeded, ActionError) as error:
                 session.rollback()  # any partial card and audit are discarded
                 actions = []
-                answer = (answer + "\n" + str(error))[:4000]
+                if isinstance(error, SelectionNeeded):
+                    with Session(bind=bind) as read_db:
+                        answer = explain_selection_needed(read_db, traveler["id"], plans, error)
+                else:
+                    with Session(bind=bind) as read_db:
+                        answer = explain_action_error(read_db, traveler["id"], plans, error)
+                if overview:
+                    answer = (overview + "\n" + answer)[:4000]
         if len(references) > 15:
             references = references[:15]
         outcome = finish_turn(session, traveler["id"], session_id, turn["id"],

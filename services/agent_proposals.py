@@ -89,7 +89,7 @@ def _product_choice(kind, proposed, groups, text):
     return choice
 
 
-def _owned_order(db, traveler_id, kind, proposed, text):
+def _owned_order(db, traveler_id, kind, proposed, text, *, all_cancellations=False):
     table = ORDER_TABLES[kind]
     rows = db.execute(select(table).where(
         table.c.traveler_id == traveler_id, table.c.status == "confirmed",
@@ -98,7 +98,7 @@ def _owned_order(db, traveler_id, kind, proposed, text):
         matched = [row for row in rows if row["id"] == proposed]
         if not matched:
             raise SelectionNeeded("未找到可办理的本人订单，请查看行程并指定订单。")
-        if len(rows) > 1 and proposed not in text:
+        if len(rows) > 1 and proposed not in text and not all_cancellations:
             raise SelectionNeeded("本人有多笔有效订单，请明确指出要办理的订单。")
         return matched[0]
     if len(rows) == 1:
@@ -177,7 +177,10 @@ def prepare_actions(db, traveler_id, plans, references, user_text,
         params = dict(params)
         kind, operation = action_type.split("_", 1)
         if operation in ("change", "cancel"):
-            order = _owned_order(db, traveler_id, kind, params.get("order_id"), user_text)
+            order = _owned_order(db, traveler_id, kind, params.get("order_id"),
+                                 user_text, all_cancellations=(operation == "cancel"
+                                 and "取消" in user_text
+                                 and bool(re.search(r"所有|全部", user_text))))
             params["order_id"] = order["id"]
             params["expected_version"] = order["version"]
         if operation == "book" or (kind in ("flight", "hotel") and operation == "change"):

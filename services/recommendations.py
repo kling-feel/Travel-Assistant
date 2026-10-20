@@ -1,6 +1,7 @@
 """Traveler-scoped, evidence-only place suggestions for the controlled graph."""
 
 import ipaddress
+import logging
 import re
 from datetime import date, datetime, timezone
 from typing import Protocol
@@ -17,6 +18,8 @@ from services.recommendation_geography import (airport_geography,
                                                country_for_reachable_city)
 from services.reviewed_places import places_for_city
 from services.location_labels import CITY_ALIASES as _CITY_ALIASES, city_zh
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationProvider(Protocol):
@@ -51,6 +54,11 @@ _PREFERENCES = {word: category for category, words in {
     "family": ("亲子", "孩子"),
     "food": ("美食", "餐饮"),
 }.items() for word in words}
+_COUNTRY_REQUESTS = {
+    "中国": "CN", "日本": "JP", "美国": "US", "法国": "FR",
+    "英国": "GB", "瑞士": "CH", "韩国": "KR", "加拿大": "CA",
+    "意大利": "IT", "阿联酋": "AE",
+}
 _UNSAFE_TEXT = re.compile(
     r"忽略|系统提示|开发者|执行命令|密钥|付款|下单|修改政策|"
     r"ignore|system prompt|developer|execute|secret|api key|password|token", re.I)
@@ -233,6 +241,7 @@ class ReviewedCatalogProvider:
                 self.live_status = exc.kind
             except Exception:
                 self.live_status = "upstream"
+            logger.info("place_search status=%s", self.live_status)
         return places
 
 
@@ -499,6 +508,22 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
     candidate = params.get("city") if isinstance(params.get("city"), str) else None
     # A city proposed by the model is only accepted when the traveler typed it.
     explicit = _explicit_city(user_text, cities)
+    requested_country = next(((name, code) for name, code in _COUNTRY_REQUESTS.items()
+                              if name in user_text), None)
+    if requested_country and explicit is None:
+        name, code = requested_country
+        choices = [place for place in cities if
+                   (country_for_reachable_city(db, place) or {}).get("code") == code]
+        if not choices:
+            return result(f"当前演示航班网络没有可核实的{name}可达城市；请换一个目的地。")
+        shown = "、".join(city_zh(place) for place in choices[:8])
+        suffix = "等" if len(choices) > 8 else ""
+        return result(f"当前可推荐的{name}航班可达城市有：{shown}{suffix}。"
+                      "你想了解哪座城市？选定后我会给出有来源的经典地点建议。")
+    if requested_country and explicit and (
+            (country_for_reachable_city(db, explicit) or {}).get("code")
+            != requested_country[1]):
+        return result("你提到的城市与国家或地区不一致，请明确本轮目的地。")
     city = explicit
     candidate_mentioned = bool(candidate and _mentioned(user_text, candidate))
     if city is None and candidate_mentioned and candidate.isascii():

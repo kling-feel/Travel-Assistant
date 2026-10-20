@@ -33,7 +33,7 @@ def itinerary(session, traveler_id):
     ).mappings().all()
     hotel_rows = session.execute(
         select(hotel_orders.c.id, hotel_orders.c.status, hotel_orders.c.version,
-               hotel_orders.c.check_in, hotel_orders.c.check_out,
+               hotel_orders.c.product_id, hotel_orders.c.check_in, hotel_orders.c.check_out,
                hotel_orders.c.total_price, hotels.c.name, hotels.c.city,
                hotel_products.c.room_type)
         .join(hotel_products, hotel_orders.c.product_id == hotel_products.c.id)

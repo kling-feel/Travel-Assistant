@@ -35,7 +35,7 @@ class Settings:
     AI_API_KEY = os.getenv("AI_API_KEY", "")
     AI_BASE_URL = os.getenv("AI_BASE_URL", "")
     ALIYUN_IQS_API_KEY = os.getenv("ALIYUN_IQS_API_KEY", "")
-    ALIYUN_IQS_ENABLED = os.getenv("ALIYUN_IQS_ENABLED", "false").lower() == "true"
+    ALIYUN_IQS_ENABLED = os.getenv("ALIYUN_IQS_ENABLED", "true").lower() == "true"
 
 
 settings = Settings()

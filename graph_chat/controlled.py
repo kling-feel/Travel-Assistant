@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from services.dialogue_boundaries import boundary_intent
+from config import settings
 
 
 INTENTS = ("general", "itinerary", "policy", "flight_search", "hotel_search",
@@ -63,6 +64,32 @@ def build_graph(model, read_evidence, checkpointer):
     def route(state: TurnState):
         history = state["history"][-10:]
         user_text = history[-1]["content"]
+        previous = history[-2]["content"] if len(history) > 1 else ""
+        if re.search(r"什么模型|模型内核|底层模型|使用.{0,5}模型", user_text):
+            return {"intent": "general", "params": {"mode": "model_info"}, "draft": ""}
+        if re.search(r"你听不懂|没听懂|为什么不行|为什么不能|刚才为什么", user_text):
+            if "已生成" in previous and "待确认卡" in previous:
+                clarification = ("上一轮只生成了待确认卡，订单尚未改变。"
+                                 "请在页面查看每张卡的当前状态，分别确认或拒绝。")
+            elif "已过起飞时间" in previous:
+                clarification = "上一轮的机票已过起飞时间，服务端拒绝取消或改签；订单没有改变。"
+            elif "已过取消截止" in previous or "入住日期已到" in previous:
+                clarification = "上一轮的酒店已过取消截止日期，服务端拒绝取消；订单没有改变。"
+            elif "改签还需要选择" in previous:
+                clarification = "上一轮已找到你的原机票；还缺同航线的新班次。你可以先给新日期，我再列候选。"
+            elif "酒店还需要明确" in previous:
+                clarification = "上一轮还缺入住、退房日期及酒店房型；补齐后我才能生成待确认卡。"
+            elif previous:
+                clarification = "请看上一轮的具体结果；你可以告诉我想核对的订单或缺少的条件。"
+            else:
+                clarification = "请指出你想了解的订单或时间，我会核对后解释。"
+            return {"intent": "general", "params": {}, "draft":
+                    "抱歉，刚才没有解释清楚。" + clarification}
+        if re.search(r"起飞时间|航班时间|退房时间|入住时间", user_text) or (
+                "时间" in user_text and "我的行程" in previous):
+            return {"intent": "itinerary", "params": {}, "draft": ""}
+        if re.search(r"(?:中国|日本|美国|法国|英国|瑞士|韩国|加拿大|意大利|阿联酋).{0,15}(?:旅游|旅行|推荐|去哪)", user_text):
+            return {"intent": "recommendation", "params": {}, "draft": ""}
         boundary = boundary_intent(user_text)
         if boundary == "external_policy":
             return {"intent": "general", "params": {}, "draft":
@@ -93,6 +120,13 @@ def build_graph(model, read_evidence, checkpointer):
             draft = "我暂时无法确认你的需求。请换一种说法，或明确查询的业务类型。"
         if not isinstance(params, dict):
             params = {}
+        if intent == "transaction" and re.search(r"景点|游览|门票", user_text) and re.search(
+                r"预订|订|购买|购票|买|预约|改期|取消", user_text):
+            return {"intent": "recommendation", "params": {}, "draft": ""}
+        if intent == "transaction" and not re.search(
+                r"预订|取消|改签|改期|订酒店|订房|订票|订机票|租车", user_text):
+            return {"intent": "general", "params": {}, "draft":
+                    "请说明本轮想查询什么；我不会根据上一轮的话自动重试订单操作。"}
         # Keep the evidence boundary independent of the model's JSON decision.
         if boundary_intent(user_text) in ("external_policy", "ambiguous_policy") and intent == "policy":
             return {"intent": "general", "params": {}, "draft":
@@ -110,11 +144,21 @@ def build_graph(model, read_evidence, checkpointer):
         return {"intent": intent, "params": params, "draft": draft or ""}
 
     def general(state: TurnState):
+        if state.get("params", {}).get("mode") == "model_info":
+            provider = {"deepseek": "DeepSeek", "gpt": "GPT", "local": "本地模型"}.get(
+                settings.AI_PROVIDER.lower().strip(), "已配置模型")
+            model_name = settings.AI_MODEL.strip()
+            detail = f"（模型标识：{model_name}）" if re.fullmatch(
+                r"[A-Za-z0-9._/-]{1,80}", model_name) else ""
+            return {"answer": f"当前旅行助手使用 {provider}{detail}。", "references": []}
         return {"answer": _safe_general(state.get("draft")), "references": []}
 
     def lookup(intent):
         def node(state: TurnState):
-            return read_evidence(intent, state.get("params", {}))
+            params = state.get("params", {})
+            if intent == "itinerary":
+                params = {**params, "_user_text": state["history"][-1]["content"]}
+            return read_evidence(intent, params)
         return node
 
     def transaction(state: TurnState):

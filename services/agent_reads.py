@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 
 from db.travel_models import airports, chat_turns, demo_state
-from services.actions import ActionNotFound, get_proposal
+from services.actions import ActionNotFound, _hotel_today, get_proposal
 from services.location_labels import airport_zh, amount_zh, city_zh, product_zh, room_zh
 from services.sessions import _owned_session
 from services.travel import (OrderError, find_flights, find_hotels, find_rentals,
@@ -100,10 +100,15 @@ def read_for_assistant(db, traveler_id, intent, params):
     """Never accept owner, price, or policy content from model parameters."""
     if intent == "itinerary":
         rows = itinerary(db, traveler_id)
+        question = _as_text(params.get("_user_text"), 4000) or ""
+        flight_only = "起飞" in question or "航班时间" in question
+        hotel_only = "退房时间" in question or "入住时间" in question
         parts = []
         references = []
         for kind, label in (("flight_orders", "机票"), ("hotel_orders", "酒店"),
                             ("rental_orders", "租车")):
+            if (flight_only and kind != "flight_orders") or (hotel_only and kind != "hotel_orders"):
+                continue
             orders = rows[kind][:5]
             if not orders:
                 parts.append(f"{label}：暂无订单")
@@ -111,17 +116,24 @@ def read_for_assistant(db, traveler_id, intent, params):
             if kind == "flight_orders":
                 descriptions = [
                     f"{_airport(db, item['departure_airport'])[0]} → {_airport(db, item['arrival_airport'])[0]}"
-                    f"（航班 {item['flight_no']}，订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}）"
+                    f"（航班 {item['flight_no']}，起飞 {_local_time(item['departure_at'], _airport(db, item['departure_airport'])[1])}，"
+                    f"到达 {_local_time(item['arrival_at'], _airport(db, item['arrival_airport'])[1])}，"
+                    f"订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}"
+                    f"{'，起飞时间已过' if item['departure_at'].replace(tzinfo=item['departure_at'].tzinfo or timezone.utc) <= datetime.now(timezone.utc) else ''}）"
                     for item in orders]
             elif kind == "hotel_orders":
                 descriptions = [
                     f"{product_zh(item['name'], city=item['city'])} {room_zh(item['room_type'])}"
-                    f"（{item['check_in']} 入住，订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}）"
+                    f"（{item['check_in']} 入住、{item['check_out']} 退房，"
+                    f"订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}"
+                    f"{'，入住日期已过' if item['check_in'] < _hotel_today(db, item['product_id'], datetime.now(timezone.utc)) else ''}）"
                     for item in orders]
             else:
                 descriptions = [
                     f"{product_zh(item['name'], city=_airport(db, item['airport_code'])[2], airport=item['airport_code'])}"
-                    f"（订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}）"
+                    f"（取车 {_local_time(item['pickup_at'], item['airport_timezone'])}、"
+                    f"还车 {_local_time(item['dropoff_at'], item['airport_timezone'])}，"
+                    f"订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}）"
                     for item in orders]
             parts.append(f"{label}：" + "；".join(descriptions))
             references.extend({"type": "order", "id": item["id"], "kind": kind,
