@@ -69,6 +69,11 @@ def _product_choice(kind, proposed, groups, text):
         if ordinal >= len(ids):
             raise SelectionNeeded("所选序号不在当前候选中，请重新选择。")
         choice = ids[ordinal]
+    elif kind == "flight" and "最早" in text:
+        marked = [item for item in candidates if item.get("earliest_unique")]
+        if len(marked) != 1:
+            raise SelectionNeeded("最早出发班次尚未唯一确定，请重新查询并指定航班。")
+        choice = marked[0]["id"]
     elif len(ids) == 1 and re.search(r"这个|这班|这家|这辆|前面|刚才|上面|那个|那班|那家|就它|就这", text):
         choice = ids[0]
     elif "最便宜" in text:
@@ -97,7 +102,9 @@ def _compatible_candidate(kind, choice, groups, text, today):
         return None
     days = {day.isoformat() for day in mentioned_dates(text, today)} if today else set()
     if kind == "flight":
-        if days and item.get("travel_date") not in days:
+        if days and (item.get("travel_date") not in days and not (
+                item.get("earliest_unique") and "最早" in text
+                and len(days) == 1 and item.get("travel_date") >= next(iter(days)))):
             raise SelectionNeeded("所选航班与本轮日期不一致，请重新查询。")
         places = mentioned_cities(text)
         allowed = {item.get(key) for key in ("departure", "arrival", "departure_airport", "arrival_airport")}

@@ -11,7 +11,7 @@ from services.location_labels import airport_zh, amount_zh, city_zh, product_zh,
 from services.location_labels import CITY_ALIASES, EXTRA_CITY_ALIASES
 from services.weather_search import WeatherSearchError, search_weather
 from services.sessions import _owned_session
-from services.travel import (OrderError, find_flights, find_hotels, find_rentals,
+from services.travel import (OrderError, find_earliest_flights, find_flights, find_hotels, find_rentals,
                              itinerary, policies)
 
 
@@ -220,9 +220,12 @@ def read_for_assistant(db, traveler_id, intent, params):
     if intent == "flight_search":
         departure = _as_text(params.get("departure"))
         arrival = _as_text(params.get("arrival"))
+        earliest = params.get("sort") == "earliest"
         travel_date = _as_date(params.get("travel_date"))
-        missing = [label for label, value in (("出发地", departure), ("目的地", arrival),
-                                              ("出行日期", travel_date)) if not value]
+        required = [("出发地", departure), ("目的地", arrival)]
+        if not earliest:
+            required.append(("出行日期", travel_date))
+        missing = [label for label, value in required if not value]
         if missing:
             known = "、".join(((_airport(db, value)[0] if len(value) == 3 else city_zh(_city(value))))
                              for value in (departure, arrival) if value)
@@ -231,6 +234,38 @@ def read_for_assistant(db, traveler_id, intent, params):
         departures, arrivals = _airports_for(db, departure), _airports_for(db, arrival)
         if not departures or not arrivals:
             return _result("当前航班网络无法识别该出发地或目的地；请提供可达城市或机场名称。")
+        if earliest:
+            bound = _as_date(params.get("not_before"))
+            if params.get("not_before") and bound is None:
+                return _result("最早出发日期无法核对，请重新说明日期。")
+            try:
+                found = find_earliest_flights(db, departures, arrivals, not_before=bound)
+            except OrderError:
+                return _result("当前无法核实最早可出发航班，请稍后重试。")
+            rows = found["rows"]
+            begin = max(demo_date(db) + timedelta(days=1), bound or date.today())
+            window = f"{begin} 至 {found['last_day']}"
+            if not rows:
+                return _result(f"已查询 {city_zh(_city(departure))} 至 {city_zh(_city(arrival))}"
+                               f"在 {window} 的全部机场组合，没有可预订的直达班次。")
+            ties = found["tie_count"]
+            prefix = (f"在 {window} 的可订窗口内，最早的直达航班是：" if ties == 1 else
+                      f"在 {window} 的可订窗口内，有 {ties} 个班次同为最早起飞，请指定其中一班：")
+            references = []
+            for row in rows:
+                zone = _airport(db, row["departure_airport"])[1]
+                stamp = row["departure_at"].replace(tzinfo=row["departure_at"].tzinfo or timezone.utc)
+                references.append({"type": "flight", "id": row["id"],
+                                   "offer_version": row["offer_version"],
+                                   "price": row["demo_fare_amount"],
+                                   "travel_date": stamp.astimezone(ZoneInfo(zone)).date().isoformat()})
+            return {"answer": prefix + "；".join(
+                f"{_airport(db, row['departure_airport'])[0]} → {_airport(db, row['arrival_airport'])[0]}，"
+                f"航班 {row['flight_no']}（候选 {row['id']}，"
+                f"当地出发 {_local_time(row['departure_at'], _airport(db, row['departure_airport'])[1])}，"
+                f"参考报价 {amount_zh(row['demo_fare_amount'])}）" for row in rows),
+                    "references": references,
+                    "earliest_id": rows[0]["id"] if ties == 1 else None}
         today = demo_date(db)
         if not today + timedelta(days=1) <= travel_date <= today + timedelta(days=30):
             return _result(f"当前可查的出发日期为 {today + timedelta(days=1)} 至 {today + timedelta(days=30)}；"

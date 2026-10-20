@@ -291,7 +291,7 @@ def _public(row, now):
 
 
 def create_proposal(db, traveler_id, session_id, action_type, parameters, *,
-                    now=None, idempotency_key=None):
+                    now=None, idempotency_key=None, reuse_pending=False):
     """Caller owns transaction; proposal and its audit event commit together."""
     now = _utc(now or datetime.now(timezone.utc))
     if action_type not in FIELDS or not isinstance(parameters, dict):
@@ -328,6 +328,29 @@ def create_proposal(db, traveler_id, session_id, action_type, parameters, *,
     policy = _policy(db, action_type)
     order, before, after, price, offer_version = _quote(
         db, traveler_id, action_type, normalized, now)
+    pending = []
+    if reuse_pending:
+        pending = db.execute(select(pending_actions).where(
+            pending_actions.c.traveler_id == traveler_id,
+            pending_actions.c.session_id == session_id,
+            pending_actions.c.action_type == action_type,
+            pending_actions.c.status == "pending",
+            pending_actions.c.expires_at > now,
+        ).order_by(pending_actions.c.created_at.desc())).mappings().all()
+    for old in pending:
+        if old["parameters"] != normalized or _utc(old["expires_at"]) <= now:
+            continue
+        same_quote = (
+            old["target_order_id"] == (order["id"] if order else None)
+            and old["target_order_version"] == (order["version"] if order else None)
+            and old["before_snapshot"] == before
+            and old["after_snapshot"] == after
+            and old["price_summary"] == {"unit": "demo", **price}
+            and old["policy_id"] == policy["id"]
+            and old["policy_version"] == policy["version"]
+            and old["offer_version"] == offer_version)
+        if same_quote:
+            return get_proposal(db, traveler_id, session_id, old["id"], now=now)
     action_id = idempotency_key or str(uuid4())
     db.execute(insert(pending_actions).values(
         id=action_id, traveler_id=traveler_id, session_id=session_id,

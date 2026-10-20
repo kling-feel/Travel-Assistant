@@ -335,18 +335,24 @@ def conversation_turn(session_id: str, data: TurnRequest,
                 resolved = prepare_actions(session, traveler["id"], plans,
                                            shown, content, content, local_today())
                 verify_shown_quotes(session, resolved, shown)
+                reused_count = 0
                 for index, (action_type, parameters) in enumerate(resolved):
                     key = str(uuid5(UUID(turn["id"]), str(index)))
                     card = create_proposal(
                         session, traveler["id"], session_id, action_type,
-                        parameters, idempotency_key=key,
+                        parameters, idempotency_key=key, reuse_pending=True,
                     )
+                    reused_count += card["id"] != key
                     actions.append(jsonable_encoder(card))
                 references = references + [{"type": "action", "id": card["id"]}
                                            for card in actions]
                 read_answer = answer if result.get("params", {}).get("queries") else ""
+                card_notice = (f"沿用已有的 {reused_count} 张待确认卡。" if reused_count == len(actions)
+                               else f"已生成 {len(actions) - reused_count} 张待确认卡，"
+                                    f"沿用已有 {reused_count} 张。" if reused_count else
+                                    f"已生成 {len(actions)} 张待确认卡。")
                 answer = (overview + "\n" if overview else "") + (
-                          f"已生成 {len(actions)} 张待确认卡。"
+                          card_notice +
                           "请逐张核对对象、时间、金额和政策，并通过对应动作接口确认或拒绝；"
                           "目前订单尚未改变。")
                 if read_answer:

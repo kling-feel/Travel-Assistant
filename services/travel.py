@@ -9,12 +9,13 @@ from math import asin, cos, radians, sin, sqrt
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import and_, func, insert, or_, select, update
 
 from db.travel_models import (airports, demo_state, flight_offers, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, policy_documents, rental_orders,
                               rental_products)
 from services.policy_catalog import CURRENT_POLICIES
+from services.demo_pricing import NETWORK_OFFER_RULE_ID, OFFER_RULE_ID
 
 
 class OrderError(ValueError):
@@ -105,6 +106,61 @@ def find_flights(session, departure, arrival, travel_date, *, limit=20, offset=0
         .order_by(*ordering).limit(limit).offset(offset)
     ).mappings()
     return [dict(row) for row in candidates]
+
+
+def find_earliest_flights(session, departures, arrivals, *, not_before=None,
+                          now=None, limit=3):
+    """Globally sort all eligible airport pairs before limiting the answer."""
+    if (not departures or not arrivals or len(departures) > 10 or len(arrivals) > 10
+            or type(limit) is not int or not 1 <= limit <= 10
+            or not_before is not None and type(not_before) is not date):
+        raise OrderError("invalid earliest flight search")
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise OrderError("current time must include timezone")
+    now = now.astimezone(timezone.utc)
+    as_of = session.execute(select(demo_state.c.as_of).where(
+        demo_state.c.id == 1)).scalar_one_or_none()
+    if as_of is None:
+        raise OrderError("demo booking window unavailable")
+    last_day = as_of + timedelta(days=30)
+    if not_before and not_before > last_day:
+        return {"rows": [], "tie_count": 0, "last_day": last_day}
+    zones = dict(session.execute(select(airports.c.code, airports.c.timezone).where(
+        airports.c.code.in_(departures))).all())
+    scopes = []
+    for code in departures:
+        if code not in zones:
+            continue
+        zone = ZoneInfo(zones[code])
+        first_day = max(as_of + timedelta(days=1),
+                        not_before or now.astimezone(zone).date())
+        start = datetime.combine(first_day, time.min, zone).astimezone(timezone.utc)
+        end = datetime.combine(last_day + timedelta(days=1), time.min,
+                               zone).astimezone(timezone.utc)
+        start = max(start, now)
+        if start < end:
+            scopes.append(and_(flights.c.departure_airport == code,
+                               flights.c.departure_at >= start,
+                               flights.c.departure_at < end))
+    if not scopes:
+        return {"rows": [], "tie_count": 0, "last_day": last_day}
+    eligible = (flights.c.arrival_airport.in_(arrivals),
+                flights.c.status == "Scheduled",
+                flight_offers.c.rule_id.in_((OFFER_RULE_ID, NETWORK_OFFER_RULE_ID)),
+                or_(*scopes))
+    query = (select(flights, flight_offers.c.amount.label("demo_fare_amount"),
+                    flight_offers.c.version.label("offer_version"))
+             .join(flight_offers, flight_offers.c.flight_id == flights.c.id)
+             .where(*eligible).order_by(flights.c.departure_at, flights.c.id)
+             .limit(limit))
+    rows = [dict(row) for row in session.execute(query).mappings()]
+    ties = 0
+    if rows:
+        ties = session.execute(select(func.count()).select_from(
+            flights.join(flight_offers, flight_offers.c.flight_id == flights.c.id)
+        ).where(*eligible, flights.c.departure_at == rows[0]["departure_at"])).scalar_one()
+    return {"rows": rows, "tie_count": ties, "last_day": last_day}
 
 
 def _product_dates(session, start, end):
