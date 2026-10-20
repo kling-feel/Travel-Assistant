@@ -1,5 +1,6 @@
 """P1 traveler API. Client input never selects a traveler account."""
 
+import logging
 import re
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid5
@@ -29,8 +30,7 @@ from services.dialogue_context import local_today
 from services.chat_turns import (TurnConflict, _public as public_turn, begin_turn,
                                  fail_turn, finish_turn, has_graph_turns,
                                  lock_processing_turn)
-from services.agent_proposals import (SelectionNeeded, prepare_actions,
-                                      recent_references)
+from services.agent_proposals import SelectionNeeded, prepare_actions, verify_shown_quotes
 from services.agent_feedback import (cancellation_overview, explain_action_error,
                                      explain_selection_needed)
 from services.checkpoints import open_checkpointer
@@ -44,6 +44,7 @@ from utils.password_hash import verify_password
 
 router = APIRouter()
 bearer = HTTPBearer()
+logger = logging.getLogger(__name__)
 
 
 class LoginRequest(BaseModel):
@@ -314,6 +315,10 @@ def conversation_turn(session_id: str, data: TurnRequest,
             raise ValueError("invalid graph result")
         actions = []
         plans = result.get("transaction_plan") or []
+        logger.info("dialogue_route intent=%s action_types=%s reference_count=%d",
+                    result.get("intent"),
+                    [item.get("action_type") for item in plans if isinstance(item, dict)],
+                    len(references))
         mass_cancel = ("取消" in content and bool(re.search(r"所有|全部", content))
                        and "机票" in content and "酒店" in content)
         overview = ""
@@ -324,11 +329,12 @@ def conversation_turn(session_id: str, data: TurnRequest,
         if plans:
             try:
                 lock_processing_turn(session, traveler["id"], session_id, turn["id"])
-                shown = recent_references(session, session_id, references)
-                user_context = "\n".join(
-                    row["content"] for row in history if row["role"] == "user")
+                candidates = result.get("candidates") or {}
+                shown = [sum((list(items) for items in candidates.values()
+                              if isinstance(items, list)), [])] if isinstance(candidates, dict) else []
                 resolved = prepare_actions(session, traveler["id"], plans,
-                                           shown, content, user_context, local_today())
+                                           shown, content, content, local_today())
+                verify_shown_quotes(session, resolved, shown)
                 for index, (action_type, parameters) in enumerate(resolved):
                     key = str(uuid5(UUID(turn["id"]), str(index)))
                     card = create_proposal(
@@ -338,11 +344,15 @@ def conversation_turn(session_id: str, data: TurnRequest,
                     actions.append(jsonable_encoder(card))
                 references = references + [{"type": "action", "id": card["id"]}
                                            for card in actions]
+                read_answer = answer if result.get("params", {}).get("queries") else ""
                 answer = (overview + "\n" if overview else "") + (
                           f"已生成 {len(actions)} 张待确认卡。"
                           "请逐张核对对象、时间、金额和政策，并通过对应动作接口确认或拒绝；"
                           "目前订单尚未改变。")
+                if read_answer:
+                    answer += "\n查询结果：" + read_answer
             except (SelectionNeeded, ActionError) as error:
+                logger.info("dialogue_proposal_rejected reason=%s", type(error).__name__)
                 session.rollback()  # any partial card and audit are discarded
                 actions = []
                 if isinstance(error, SelectionNeeded):
@@ -353,6 +363,8 @@ def conversation_turn(session_id: str, data: TurnRequest,
                         answer = explain_action_error(read_db, traveler["id"], plans, error)
                 if overview:
                     answer = (overview + "\n" + answer)[:4000]
+                elif result.get("params", {}).get("queries"):
+                    answer = (answer + "\n查询结果：" + result.get("answer", ""))[:4000]
         if len(references) > 15:
             references = references[:15]
         outcome = finish_turn(session, traveler["id"], session_id, turn["id"],

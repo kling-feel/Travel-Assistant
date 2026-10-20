@@ -5,9 +5,10 @@ from datetime import date, timedelta
 
 from sqlalchemy import select
 
-from db.travel_models import (chat_turns, flight_orders, hotel_orders,
-                              rental_orders)
+from db.travel_models import (chat_turns, flight_offers, flight_orders, hotel_orders,
+                              hotel_products, rental_orders, rental_products)
 from services.actions import FIELDS
+from services.dialogue_context import mentioned_cities, mentioned_dates
 
 
 class SelectionNeeded(ValueError):
@@ -68,7 +69,7 @@ def _product_choice(kind, proposed, groups, text):
         if ordinal >= len(ids):
             raise SelectionNeeded("所选序号不在当前候选中，请重新选择。")
         choice = ids[ordinal]
-    elif len(ids) == 1:
+    elif len(ids) == 1 and re.search(r"这个|这班|这家|这辆|前面|刚才|上面|那个|那班|那家|就它|就这", text):
         choice = ids[0]
     elif "最便宜" in text:
         priced = [item for item in candidates if type(item.get("price")) in (int, float)]
@@ -87,6 +88,24 @@ def _product_choice(kind, proposed, groups, text):
     if proposed is not None and str(proposed) != str(choice):
         raise SelectionNeeded("所选候选与请求不一致，请重新指定。")
     return choice
+
+
+def _compatible_candidate(kind, choice, groups, text, today):
+    candidates = _shown(groups, PRODUCT_TYPES[kind])
+    item = next((item for item in candidates if str(item.get("id")) == str(choice)), None)
+    if item is None:
+        return None
+    days = {day.isoformat() for day in mentioned_dates(text, today)} if today else set()
+    if kind == "flight":
+        if days and item.get("travel_date") not in days:
+            raise SelectionNeeded("所选航班与本轮日期不一致，请重新查询。")
+        places = mentioned_cities(text)
+        allowed = {item.get(key) for key in ("departure", "arrival", "departure_airport", "arrival_airport")}
+        if any(place not in allowed for place in places):
+            raise SelectionNeeded("所选航班与本轮地点不一致，请重新查询。")
+    if kind == "hotel" and days and item.get("check_in") and item["check_in"] not in days:
+        raise SelectionNeeded("所选酒店与本轮入住日期不一致，请重新查询。")
+    return item
 
 
 def _owned_order(db, traveler_id, kind, proposed, text, *, all_cancellations=False):
@@ -123,12 +142,14 @@ def _date_grounded(value, text, today):
     return False
 
 
-def _dates_grounded(action_type, params, text, today):
+def _dates_grounded(action_type, params, text, today, candidate=None):
     if action_type.startswith("hotel_") and action_type != "hotel_cancel":
         start, end = params.get("check_in"), params.get("check_out")
-        if not _date_grounded(start, text, today):
+        if not (_date_grounded(start, text, today) or
+                candidate and candidate.get("check_in") == start):
             return False
-        if _date_grounded(end, text, today):
+        if (_date_grounded(end, text, today) or
+                candidate and candidate.get("check_out") == end):
             return True
         try:
             return ("一晚" in text and date.fromisoformat(end)
@@ -171,9 +192,6 @@ def prepare_actions(db, traveler_id, plans, references, user_text,
             raise SelectionNeeded("该交易类型暂不可用。")
         if set(params) - FIELDS[action_type]:
             raise SelectionNeeded("交易参数包含未核实的字段，请重新说明需求。")
-        if today is not None and not _dates_grounded(action_type, params,
-                                                     context_text, today):
-            raise SelectionNeeded("请明确酒店日期或租车的取还车日期和当地时刻。")
         params = dict(params)
         kind, operation = action_type.split("_", 1)
         if operation in ("change", "cancel"):
@@ -189,7 +207,38 @@ def prepare_actions(db, traveler_id, plans, references, user_text,
                 params[key] = order["product_id"]
             else:
                 params[key] = _product_choice(kind, params.get(key), references, user_text)
+            candidate = _compatible_candidate(kind, params[key], references, user_text, today)
+            if kind == "hotel" and candidate:
+                params.setdefault("check_in", candidate.get("check_in"))
+                params.setdefault("check_out", candidate.get("check_out"))
+        else:
+            candidate = None
+        if today is not None and not _dates_grounded(action_type, params,
+                                                     context_text, today, candidate):
+            raise SelectionNeeded("请明确酒店日期或租车的取还车日期和当地时刻。")
         if set(params) != FIELDS[action_type]:
             raise SelectionNeeded("交易日期、时刻或产品信息不完整，请补充后再生成确认卡。")
         resolved.append((action_type, params))
     return resolved
+
+
+def verify_shown_quotes(db, resolved, references):
+    """Reject a changed quote instead of silently presenting a different price."""
+    tables = {"flight": (flight_offers, "flight_id", "amount"),
+              "hotel": (hotel_products, "id", "nightly_price"),
+              "rental": (rental_products, "id", "daily_price")}
+    for action_type, params in resolved:
+        kind, operation = action_type.split("_", 1)
+        if operation not in ("book", "change") or action_type == "rental_change":
+            continue
+        key = "new_flight_id" if action_type == "flight_change" else PRODUCT_KEYS[kind]
+        target = params.get(key)
+        shown = next((item for item in _shown(references, PRODUCT_TYPES[kind])
+                      if str(item.get("id")) == str(target)), None)
+        if shown is None:
+            continue  # An explicit identifier is checked by create_proposal.
+        table, id_field, price_field = tables[kind]
+        row = db.execute(select(table).where(table.c[id_field] == target)).mappings().one_or_none()
+        if (row is None or row[price_field] != shown.get("price") or
+                kind == "flight" and row["version"] != shown.get("offer_version")):
+            raise SelectionNeeded("候选报价已变化，请重新查询后再确认。")

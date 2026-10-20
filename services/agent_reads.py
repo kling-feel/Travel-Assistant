@@ -283,7 +283,10 @@ def read_for_assistant(db, traveler_id, intent, params):
         )
 
     if intent == "hotel_search":
+        airport = _as_text(params.get("airport"), 8)
         city = _city(_as_text(params.get("city")))
+        if not city and airport:
+            city = _airport(db, airport.upper())[2] or None
         check_in = _as_date(params.get("check_in"))
         check_out = _as_date(params.get("check_out"))
         missing = [label for label, value in (("城市", city), ("入住日期", check_in),
@@ -292,7 +295,6 @@ def read_for_assistant(db, traveler_id, intent, params):
             known = f"已记下 {city_zh(city)}。" if city else ""
             missing_text = "和".join(missing) if len(missing) == 2 else "、".join(missing)
             return _result(known + "还需要" + missing_text + "，才能查询酒店。")
-        airport = _as_text(params.get("airport"), 8)
         sort = "distance" if airport and params.get("sort") == "distance" else "price"
         try:
             rows = find_hotels(db, city, check_in, check_out, airport=airport,
@@ -334,7 +336,7 @@ def read_for_assistant(db, traveler_id, intent, params):
             "找到以下车辆：" + "；".join(
                 f"{product_zh(row['name'], city=row['city'], airport=row['airport_code'])}"
                 f"（产品 {row['id']}，每日 {amount_zh(row['daily_price'])}）"
-                for row in rows),
+                for row in rows) + "。如需预订，请选择车辆并提供取车、还车的当地时刻。",
             [{"type": "rental_product", "id": row["id"],
               "price": row["daily_price"], "pickup_date": pickup.isoformat(),
               "drop_off_date": dropoff.isoformat()} for row in rows],

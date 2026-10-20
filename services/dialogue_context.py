@@ -12,6 +12,38 @@ _RELATIVE = re.compile(r"大后天|后天|明天|今天")
 _OFFSETS = {"今天": 0, "明天": 1, "后天": 2, "大后天": 3}
 _ABSOLUTE = re.compile(r"(?<!\d)(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?")
 _MONTH_DAY = re.compile(r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日")
+_WRITE = re.compile(r"预订|预定|下单|订票|订.{0,10}(?:机票|航班|酒店|房|车)|购买|买票|改签|改期|取消")
+
+
+def requested_actions(text: str) -> list[str]:
+    """Recognize explicit writes without treating policy questions as orders."""
+    if (not _WRITE.search(text) or re.search(r"政策|规则|条款|手续费|怎么|如何", text)
+            or re.search(r"不(?:要|想|用)?(?:预订|预定|订票|订房|订车|取消)", text)
+            or re.search(r"(?:能|可以).{0,12}(?:取消|改期|改签).{0,2}吗", text)):
+        return []
+    domains = [("flight", r"机票|航班|班机|班次|订票"),
+               ("hotel", r"酒店|房间|房型|住宿|订房"),
+               ("rental", r"租车|车辆|车子|订车")]
+    actions = []
+    segments = re.split(r"[，,；;]|并且|同时|顺便|然后|再|和(?=订|预订|预定|取消|改期|改签)", text)
+    for segment in segments:
+        for kind, noun in domains:
+            if not re.search(noun, segment):
+                continue
+            if re.search(r"取消", segment) and not re.search(r"取消.{0,8}查询", segment):
+                operation = "cancel"
+            elif kind == "flight" and re.search(r"改签", segment):
+                operation = "change"
+            elif kind != "flight" and re.search(r"改期|修改", segment):
+                operation = "change"
+            elif re.search(r"预订|预定|下单|订票|订.{0,10}(?:机票|航班|酒店|房|车)|购买|买票", segment):
+                operation = "book"
+            else:
+                continue
+            action = f"{kind}_{operation}"
+            if action not in actions:
+                actions.append(action)
+    return actions
 
 
 def local_today() -> date:
@@ -29,6 +61,8 @@ def mentioned_cities(text: str) -> list[str]:
         if name in text:
             found.append((text.index(name), -len(name), code))
     for match in re.finditer(r"(?<![A-Za-z])[A-Z]{3}(?![A-Za-z])", text):
+        if match.group() == "SIM" and text[match.end():match.end() + 1] == "-":
+            continue
         found.append((match.start(), -3, match.group()))
     for city in set(_ALIASES.values()):
         for match in re.finditer(rf"(?<![A-Za-z]){re.escape(city)}(?![A-Za-z])", text, re.I):
@@ -92,11 +126,10 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
         source = places[0] if places and re.search(r"我(?:人)?(?:现在)?(?:在|住在)|我从", text) else previous.get("source_city")
         context = {"intent": "recommendation", "source_city": source}
         return "recommendation", {**params, "source_city": source}, context
-    combined = (hotel and (flight or direct_route) and not re.search(
-        r"预订|取消|改签|改期|订酒店|订房|订票", text))
+    combined = (hotel and (flight or direct_route) and not requested_actions(text))
     continuing_multi = (previous.get("intent") == "multi_read" and (places or dates)
                         and not (hotel or flight or direct_route or recommendation)
-                        and not re.search(r"天气|租车|订单|行程|政策|取消|预订|改签|改期", text))
+                        and not re.search(r"天气|租车|订单|行程|政策|取消|预订|预定|改签|改期", text))
     if combined or continuing_multi:
         context = dict(previous) if previous.get("intent") == "multi_read" else {"intent": "multi_read"}
         if len(places) >= 2:
@@ -112,8 +145,19 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
                                 ("departure", "arrival", "travel_date")},
                               "hotel": {key: context.get(key) for key in
                                 ("city", "check_in", "check_out")}}, context
+    rental = bool(re.search(r"租车|取车|还车|车辆", text))
+    if rental or (previous.get("intent") == "rental_search" and (places or dates)
+                  and not hotel and not flight and not direct_route):
+        context = dict(previous) if previous.get("intent") == "rental_search" else {"intent": "rental_search"}
+        if places:
+            context["city"] = places[-1]
+        if len(dates) >= 2:
+            context["pickup_date"], context["drop_off_date"] = (value.isoformat() for value in dates[:2])
+        elif dates and "pickup_date" not in context:
+            context["pickup_date"] = dates[0].isoformat()
+        return "rental_search", context, context
     if hotel or (previous.get("intent") == "hotel_search" and (places or dates)
-                 and not flight and not direct_route):
+                 and not rental and not flight and not direct_route):
         context = dict(previous) if previous.get("intent") == "hotel_search" else {"intent": "hotel_search"}
         if places:
             context["city"] = places[-1]

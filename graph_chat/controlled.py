@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from services.dialogue_boundaries import boundary_intent
-from services.dialogue_context import local_today, read_request
+from services.dialogue_context import local_today, mentioned_cities, read_request, requested_actions
 from config import settings
 
 
@@ -17,7 +17,7 @@ INTENTS = ("general", "itinerary", "policy", "flight_search", "hotel_search",
            "weather", "capabilities", "hotel_coverage", "multi_read")
 ROUTER_PROMPT = """你是虚构旅行平台的主助手。只输出一个 JSON 对象，字段为 intent、params、answer。
 intent 只能是 general、itinerary、policy、flight_search、hotel_search、rental_search、transaction、recommendation。
-航班/酒店/租车预订、改期、取消属于 transaction；景点或旅行地点推荐属于 recommendation。
+航班/酒店/租车预订（含“预定”）、改期、取消属于 transaction；景点或旅行地点推荐属于 recommendation。
 政策查询用 policy，params.scope 只能是 flight/hotel/rental。本人订单用 itinerary。
 搜索参数：flight_search 用 departure/arrival 城市或机场原文、travel_date YYYY-MM-DD、可选 sort=price；
 hotel_search 用 city/check_in/check_out；rental_search 用 city 或 airport、pickup_date/drop_off_date。中文地名和相对日期由服务端规范化，不要猜机场代码。
@@ -56,6 +56,8 @@ class TurnState(TypedDict, total=False):
     references: list[dict]
     transaction_plan: list[dict]
     context: dict
+    candidates: dict
+    task_contexts: dict
 
 
 def _safe_general(draft):
@@ -65,6 +67,26 @@ def _safe_general(draft):
     return draft.strip()
 
 
+def _scoped_candidates(intent, references, params):
+    """Keep task scope in the checkpoint without changing public citations."""
+    rows = []
+    for item in references:
+        if not isinstance(item, dict):
+            continue
+        scoped = dict(item)
+        if intent == "flight_search" and item.get("type") == "flight":
+            scoped["departure"] = (mentioned_cities(str(params.get("departure") or "")) or
+                                   [params.get("departure")])[0]
+            scoped["arrival"] = (mentioned_cities(str(params.get("arrival") or "")) or
+                                 [params.get("arrival")])[0]
+            scoped["arrival_airport"] = (params.get("arrival") if
+                                          len(str(params.get("arrival") or "")) == 3 else None)
+        elif intent == "hotel_search" and item.get("type") == "hotel_product":
+            scoped["city"] = params.get("city")
+        rows.append(scoped)
+    return rows
+
+
 def build_graph(model, read_evidence, checkpointer):
     def route(state: TurnState):
         history = state["history"][-10:]
@@ -72,14 +94,15 @@ def build_graph(model, read_evidence, checkpointer):
         previous = history[-2]["content"] if len(history) > 1 else ""
         prior_context = state.get("context", {})
         base = local_today()
+        writes = requested_actions(user_text)
         direct_intent, direct_params, direct_context = read_request(
             user_text, "general", {}, prior_context, base)
-        if direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
+        if not writes and direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
             return {"intent": direct_intent, "params": direct_params,
                     "context": direct_context, "draft": ""}
         if (re.search(r"(?:现在|还有).{0,12}(?:行程|机票|航班|出发)|"
                       r"(?:行程|机票|航班).{0,12}(?:还有|要出发)", user_text)
-                and not re.search(r"取消|改签|预订|订票", user_text)):
+                and not writes):
             return {"intent": "itinerary", "params": {},
                     "context": prior_context, "draft": ""}
         if re.search(r"什么模型|模型内核|底层模型|使用.{0,5}模型", user_text):
@@ -142,8 +165,7 @@ def build_graph(model, read_evidence, checkpointer):
         if intent == "transaction" and re.search(r"景点|游览|门票", user_text) and re.search(
                 r"预订|订|购买|购票|买|预约|改期|取消", user_text):
             return {"intent": "recommendation", "params": {}, "draft": ""}
-        if intent == "transaction" and not re.search(
-                r"预订|取消|改签|改期|订酒店|订房|订票|订机票|租车", user_text):
+        if intent == "transaction" and not writes:
             if direct_intent in ("flight_search", "hotel_search", "recommendation"):
                 return {"intent": direct_intent, "params": direct_params,
                         "context": direct_context, "draft": ""}
@@ -156,19 +178,36 @@ def build_graph(model, read_evidence, checkpointer):
         place_request = bool(re.search(r"景点|经典地点|游览|旅行推荐|旅游推荐|去哪玩|好玩的地方", user_text))
         excursion_action = bool(re.search(r"景点|游览|门票", user_text)
                                 and re.search(r"预订|订|购买|改期|取消", user_text))
-        business_write = bool(re.search(r"机票|航班|酒店|租车", user_text)
-                              and re.search(r"预订|订房|订票|改签|改期|取消|租车", user_text))
+        business_write = bool(writes)
         if place_request and (excursion_action or not business_write):
             intent, params, draft = "recommendation", params, ""
         if intent == "general":
             if re.search(r"预订|改签|取消|退款|下单|订票|订房|景点|推荐|政策|订单|航班|酒店|租车", user_text):
                 draft = "请说明你要查询行程、平台政策、航班酒店租车候选，还是希望办理订单变更。"
+        if writes and not excursion_action:
+            suggested = params.get("actions", []) if intent == "transaction" else []
+            matched = {item.get("action_type"): item for item in suggested
+                       if isinstance(item, dict) and isinstance(item.get("parameters"), dict)}
+            queries = params.get("queries", []) if intent == "transaction" else []
+            if not isinstance(queries, list):
+                queries = []
+            if ("flight_book" in writes and re.search(r"(?:顺便|再|同时).{0,8}(?:找|查|看看).{0,18}酒店", user_text)):
+                cities = mentioned_cities(user_text)
+                queries.append({"intent": "hotel_search", "params":
+                                {"city": cities[-1]} if cities else {}})
+            params = {"actions": [matched.get(kind, {"action_type": kind, "parameters": {}})
+                                  for kind in writes[:2]], "queries": queries[:2]}
+            intent = "transaction"
         if intent != "transaction":
             intent, params, context = read_request(user_text, intent, params,
                                                    prior_context, base)
         else:
             context = prior_context
+        tasks = dict(state.get("task_contexts") or {})
+        if intent in ("flight_search", "hotel_search", "rental_search"):
+            tasks[intent] = context
         return {"intent": intent, "params": params, "context": context,
+                "task_contexts": tasks,
                 "draft": draft or ""}
 
     def general(state: TurnState):
@@ -186,7 +225,13 @@ def build_graph(model, read_evidence, checkpointer):
             params = state.get("params", {})
             if intent == "itinerary":
                 params = {**params, "_user_text": state["history"][-1]["content"]}
-            return read_evidence(intent, params)
+            result = read_evidence(intent, params)
+            if intent in ("flight_search", "hotel_search", "rental_search"):
+                groups = dict(state.get("candidates") or {})
+                groups[intent.split("_")[0]] = _scoped_candidates(
+                    intent, result.get("references", []), params)
+                return {**result, "candidates": groups}
+            return result
         return node
 
     def transaction(state: TurnState):
@@ -198,20 +243,35 @@ def build_graph(model, read_evidence, checkpointer):
         if not isinstance(queries, list):
             queries = []
         answers, references = [], []
+        groups = dict(state.get("candidates") or {})
         for query in queries[:2]:
             if not isinstance(query, dict) or query.get("intent") not in (
                     "itinerary", "flight_search", "hotel_search", "rental_search"):
                 continue
             query_params = query.get("params")
+            query_params = dict(query_params) if isinstance(query_params, dict) else {}
+            if query["intent"] == "hotel_search" and not query_params.get("city"):
+                flights = groups.get("flight", [])
+                proposed = next((item.get("parameters", {}).get("flight_id") for item in plans
+                                 if isinstance(item, dict) and item.get("action_type") == "flight_book"), None)
+                chosen = [item for item in flights if item.get("type") == "flight"
+                          and (proposed is None or item.get("id") == proposed)]
+                if len(chosen) == 1:
+                    destination = chosen[0].get("arrival_airport") or chosen[0].get("arrival")
+                    if destination:
+                        query_params["airport" if len(destination) == 3 else "city"] = destination
             result = read_evidence(query["intent"],
-                                   query_params if isinstance(query_params, dict) else {})
+                                   query_params)
             answers.append(result["answer"])
             references.extend(result["references"])
+            groups[query["intent"].split("_")[0]] = _scoped_candidates(
+                query["intent"], result["references"], query_params)
         if not answers:
             answers.append("请说明要办理的订单或具体候选，以及日期和时间；有多个候选时请指定其中一个。")
         if len(plans) > 2:
             answers.append("本轮最多处理两笔；其余需求请在下一轮提出。")
         return {"answer": "\n".join(answers), "references": references[:15],
+                "candidates": groups,
                 "transaction_plan": plans[:2]}
 
     def recommendation(state: TurnState):
@@ -224,7 +284,12 @@ def build_graph(model, read_evidence, checkpointer):
         flight = read_evidence("flight_search", params.get("flight", {}))
         hotel = read_evidence("hotel_search", params.get("hotel", {}))
         return {"answer": f"航班：{flight['answer']}\n酒店：{hotel['answer']}",
-                "references": (flight["references"] + hotel["references"])[:15]}
+                "references": (flight["references"] + hotel["references"])[:15],
+                "candidates": {**(state.get("candidates") or {}),
+                               "flight": _scoped_candidates("flight_search", flight["references"],
+                                                            params.get("flight", {})),
+                               "hotel": _scoped_candidates("hotel_search", hotel["references"],
+                                                           params.get("hotel", {}))}}
 
     builder = StateGraph(TurnState)
     builder.add_node("route", route)
