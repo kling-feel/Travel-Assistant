@@ -25,6 +25,7 @@ from services.actions import (ActionError, ActionNotFound, create_proposal,
                               get_proposal, list_proposals)
 from services.confirmations import confirm_action, reject_action, list_action_history
 from services.agent_reads import demo_date, read_action_guidance, read_for_assistant
+from services.dialogue_context import local_today
 from services.chat_turns import (TurnConflict, _public as public_turn, begin_turn,
                                  fail_turn, finish_turn, has_graph_turns,
                                  lock_processing_turn)
@@ -327,7 +328,7 @@ def conversation_turn(session_id: str, data: TurnRequest,
                 user_context = "\n".join(
                     row["content"] for row in history if row["role"] == "user")
                 resolved = prepare_actions(session, traveler["id"], plans,
-                                           shown, content, user_context, demo_date(session))
+                                           shown, content, user_context, local_today())
                 for index, (action_type, parameters) in enumerate(resolved):
                     key = str(uuid5(UUID(turn["id"]), str(index)))
                     card = create_proposal(

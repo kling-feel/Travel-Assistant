@@ -8,17 +8,21 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from services.dialogue_boundaries import boundary_intent
+from services.dialogue_context import local_today, read_request
 from config import settings
 
 
 INTENTS = ("general", "itinerary", "policy", "flight_search", "hotel_search",
-           "rental_search", "transaction", "recommendation", "action_guidance")
+           "rental_search", "transaction", "recommendation", "action_guidance",
+           "weather", "capabilities", "hotel_coverage", "multi_read")
 ROUTER_PROMPT = """你是虚构旅行平台的主助手。只输出一个 JSON 对象，字段为 intent、params、answer。
 intent 只能是 general、itinerary、policy、flight_search、hotel_search、rental_search、transaction、recommendation。
 航班/酒店/租车预订、改期、取消属于 transaction；景点或旅行地点推荐属于 recommendation。
 政策查询用 policy，params.scope 只能是 flight/hotel/rental。本人订单用 itinerary。
-搜索参数：flight_search 用 departure/arrival 机场代码、travel_date YYYY-MM-DD、可选 sort=price；
-hotel_search 用 city/check_in/check_out；rental_search 用 city 或 airport、pickup_date/drop_off_date。
+搜索参数：flight_search 用 departure/arrival 城市或机场原文、travel_date YYYY-MM-DD、可选 sort=price；
+hotel_search 用 city/check_in/check_out；rental_search 用 city 或 airport、pickup_date/drop_off_date。中文地名和相对日期由服务端规范化，不要猜机场代码。
+天气查询用 weather；能否联网用 capabilities；哪些机场有酒店用 hotel_coverage。
+“我在上海”是出发地或所在地，“想去其他国家”不是要推荐上海。旅客补充日期时沿用最近明确的查询任务。
 recommendation 的 params 可含 city（用户明确提到的城市原文）和 preference；没有明确城市时留空，不能从记忆编造地点。
 游览/景点预订不支持，仍走 recommendation 说明与推荐，不能生成 transaction 动作。
 transaction 的 params 可含 actions（最多两项）和 queries（最多两项）。每项 action 只有 action_type 与 parameters；
@@ -39,7 +43,7 @@ queries 每项只有 intent 和 params，intent 只能是 flight_search、hotel_
 若对象或条件不明确，仍写出用户明确要求的动作并省略未知字段，可提出 queries 以展示候选；绝不声称已预订。
 不知道参数时留空，不能编造机场、日期、订单、价格或政策。general 的 answer 只回答问候、偏好澄清等普通话题，
 不得声称已预订或给出未经核实的地点、票价、真实航司政策。其他 intent 的 answer 留空。
-演示基准日：{demo_date}。旅客与助手最近消息：\n{history}"""
+当前中国日期：{current_date}；演示数据基准日：{demo_date}。相对日期以当前中国日期为准。旅客与助手最近消息：\n{history}"""
 
 
 class TurnState(TypedDict, total=False):
@@ -51,6 +55,7 @@ class TurnState(TypedDict, total=False):
     answer: str
     references: list[dict]
     transaction_plan: list[dict]
+    context: dict
 
 
 def _safe_general(draft):
@@ -65,6 +70,18 @@ def build_graph(model, read_evidence, checkpointer):
         history = state["history"][-10:]
         user_text = history[-1]["content"]
         previous = history[-2]["content"] if len(history) > 1 else ""
+        prior_context = state.get("context", {})
+        base = local_today()
+        direct_intent, direct_params, direct_context = read_request(
+            user_text, "general", {}, prior_context, base)
+        if direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
+            return {"intent": direct_intent, "params": direct_params,
+                    "context": direct_context, "draft": ""}
+        if (re.search(r"(?:现在|还有).{0,12}(?:行程|机票|航班|出发)|"
+                      r"(?:行程|机票|航班).{0,12}(?:还有|要出发)", user_text)
+                and not re.search(r"取消|改签|预订|订票", user_text)):
+            return {"intent": "itinerary", "params": {},
+                    "context": prior_context, "draft": ""}
         if re.search(r"什么模型|模型内核|底层模型|使用.{0,5}模型", user_text):
             return {"intent": "general", "params": {"mode": "model_info"}, "draft": ""}
         if re.search(r"你听不懂|没听懂|为什么不行|为什么不能|刚才为什么", user_text):
@@ -89,7 +106,8 @@ def build_graph(model, read_evidence, checkpointer):
                 "时间" in user_text and "我的行程" in previous):
             return {"intent": "itinerary", "params": {}, "draft": ""}
         if re.search(r"(?:中国|日本|美国|法国|英国|瑞士|韩国|加拿大|意大利|阿联酋).{0,15}(?:旅游|旅行|推荐|去哪)", user_text):
-            return {"intent": "recommendation", "params": {}, "draft": ""}
+            return {"intent": "recommendation", "params": direct_params,
+                    "context": direct_context, "draft": ""}
         boundary = boundary_intent(user_text)
         if boundary == "external_policy":
             return {"intent": "general", "params": {}, "draft":
@@ -103,7 +121,8 @@ def build_graph(model, read_evidence, checkpointer):
             return {"intent": "action_guidance", "params": {"mode": boundary}, "draft": ""}
         safe_history = "\n".join(f"{row['role']}: {str(row['content'])[:1000]}"
                                  for row in history)
-        prompt = ROUTER_PROMPT.format(demo_date=state["demo_date"], history=safe_history)
+        prompt = ROUTER_PROMPT.format(demo_date=state["demo_date"],
+                                      current_date=base.isoformat(), history=safe_history)
         reply = model.invoke([SystemMessage(content=prompt),
                               HumanMessage(content="请按 JSON 格式选择本轮处理路径。")])
         try:
@@ -125,6 +144,9 @@ def build_graph(model, read_evidence, checkpointer):
             return {"intent": "recommendation", "params": {}, "draft": ""}
         if intent == "transaction" and not re.search(
                 r"预订|取消|改签|改期|订酒店|订房|订票|订机票|租车", user_text):
+            if direct_intent in ("flight_search", "hotel_search", "recommendation"):
+                return {"intent": direct_intent, "params": direct_params,
+                        "context": direct_context, "draft": ""}
             return {"intent": "general", "params": {}, "draft":
                     "请说明本轮想查询什么；我不会根据上一轮的话自动重试订单操作。"}
         # Keep the evidence boundary independent of the model's JSON decision.
@@ -141,7 +163,13 @@ def build_graph(model, read_evidence, checkpointer):
         if intent == "general":
             if re.search(r"预订|改签|取消|退款|下单|订票|订房|景点|推荐|政策|订单|航班|酒店|租车", user_text):
                 draft = "请说明你要查询行程、平台政策、航班酒店租车候选，还是希望办理订单变更。"
-        return {"intent": intent, "params": params, "draft": draft or ""}
+        if intent != "transaction":
+            intent, params, context = read_request(user_text, intent, params,
+                                                   prior_context, base)
+        else:
+            context = prior_context
+        return {"intent": intent, "params": params, "context": context,
+                "draft": draft or ""}
 
     def general(state: TurnState):
         if state.get("params", {}).get("mode") == "model_info":
@@ -191,13 +219,22 @@ def build_graph(model, read_evidence, checkpointer):
         return read_evidence("recommendation", {**params,
                 "user_text": state["history"][-1]["content"]})
 
+    def multi_read(state: TurnState):
+        params = state.get("params", {})
+        flight = read_evidence("flight_search", params.get("flight", {}))
+        hotel = read_evidence("hotel_search", params.get("hotel", {}))
+        return {"answer": f"航班：{flight['answer']}\n酒店：{hotel['answer']}",
+                "references": (flight["references"] + hotel["references"])[:15]}
+
     builder = StateGraph(TurnState)
     builder.add_node("route", route)
     builder.add_node("general", general)
     builder.add_node("transaction", transaction)
     builder.add_node("recommendation", recommendation)
+    builder.add_node("multi_read", multi_read)
     builder.add_node("action_guidance", lookup("action_guidance"))
-    for intent in ("itinerary", "policy", "flight_search", "hotel_search", "rental_search"):
+    for intent in ("itinerary", "policy", "flight_search", "hotel_search", "rental_search",
+                   "weather", "capabilities", "hotel_coverage"):
         builder.add_node(intent, lookup(intent))
     builder.add_edge(START, "route")
     builder.add_conditional_edges("route", lambda state: state["intent"],

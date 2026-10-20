@@ -506,6 +506,42 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
         demo_state.c.id == 1)).scalar_one_or_none() or date.today()
     owned = [city for city in _owned_destinations(db, traveler_id, as_of) if city in cities]
     candidate = params.get("city") if isinstance(params.get("city"), str) else None
+    outbound = bool(re.search(r"其他国家|别的国家|国外|出国|境外", user_text)
+                    or ("中国" in user_text and re.search(r"其他地方|别的地方", user_text)
+                        and re.search(r"我.{0,8}在中国", user_text)))
+    if outbound:
+        source = params.get("source_city")
+        source = source if isinstance(source, str) and len(source) <= 80 else None
+        if source is None:
+            source = _explicit_city(user_text, cities)
+        if source:
+            source_codes = db.execute(select(airports.c.code).where(
+                airports.c.city == source)).scalars().all()
+            choices = db.execute(select(airports.c.city).distinct().join(
+                flights, flights.c.arrival_airport == airports.c.code).join(
+                flight_offers, flight_offers.c.flight_id == flights.c.id).where(
+                flights.c.departure_airport.in_(source_codes), flights.c.status == "Scheduled"
+            )).scalars().all()
+            source_country = country_for_fixture_city(source)
+        else:
+            choices = cities
+            source_country = {"code": "CN"} if "中国" in user_text else None
+        if source_country:
+            choices = [name for name in choices if
+                       (country_for_fixture_city(name) or {}).get("code") != source_country["code"]]
+        else:
+            choices = []
+        preferred = ("Tokyo", "Seoul", "London", "Paris", "Amsterdam", "Singapore",
+                     "New York", "Sydney", "Bangkok", "Dubai")
+        choices = sorted(set(choices), key=lambda name: (name not in preferred,
+                         preferred.index(name) if name in preferred else name))[:5]
+        if not choices:
+            return result("目前无法核实从你所在城市出发的境外模拟航线；请说明出发城市。")
+        basis = f"从{city_zh(source)}出发的直达航线" if source else "当前可达城市"
+        return result(f"按本平台的模拟航班网络，{basis}可考虑："
+                      f"{'、'.join(city_zh(name) for name in choices)}。"
+                      "你偏好历史、自然还是美食？选定城市后，我可以介绍有来源的经典地点；"
+                      "具体出发日期的航班仍需单独查询。")
     # A city proposed by the model is only accepted when the traveler typed it.
     explicit = _explicit_city(user_text, cities)
     requested_country = next(((name, code) for name, code in _COUNTRY_REQUESTS.items()
