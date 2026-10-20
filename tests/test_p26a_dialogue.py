@@ -332,7 +332,7 @@ class DialogueTests(unittest.TestCase):
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             flight = self.turn(client, sid, auth, "flight-001", "查 10 月 19 日 HAM 到 BSL 的航班")
             self.assertEqual(flight.status_code, 200, flight.text)
-            self.assertIn("模拟报价 120", flight.json()["answer"])
+            self.assertIn("参考报价 ¥120", flight.json()["answer"])
             self.assertNotIn("9999", flight.json()["answer"])
             self.assertEqual(flight.json()["references"],
                              [{"type": "flight", "id": 1, "offer_version": 1,
@@ -533,12 +533,12 @@ class DialogueTests(unittest.TestCase):
             self.assertIn("Basel Minster", explicit.json()["answer"])
             self.assertEqual(provider.calls[0], ("Basel", "architecture", "CH"))
             inferred = self.turn(client, sid_one, one, "place-own", "给我推荐行程里的景点")
-            self.assertIn("已确认的 Basel 行程", inferred.json()["answer"])
+            self.assertIn("已确认的 巴塞尔 行程", inferred.json()["answer"])
             unknown = self.turn(client, sid_one, one, "place-unknown", "推荐伊斯坦布尔景点")
             self.assertIn("无法核对本轮目的地", unknown.json()["answer"])
             self.assertEqual(unknown.json()["references"], [])
             other = self.turn(client, sid_two, two, "place-other", "给我推荐行程里的景点")
-            self.assertIn("请明确英文城市名或机场代码", other.json()["answer"])
+            self.assertIn("请明确城市或机场名称", other.json()["answer"])
             self.assertNotIn("已确认的 Basel 行程", other.json()["answer"])
             self.assertEqual(len(provider.calls), 2)
 
@@ -556,7 +556,7 @@ class DialogueTests(unittest.TestCase):
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             unreachable = self.turn(client, sid, auth, "place-out", "推荐 Atlantis 的经典地点")
             self.assertEqual(unreachable.status_code, 200, unreachable.text)
-            self.assertIn("不在当前模拟航班可达", unreachable.json()["answer"])
+            self.assertIn("不在当前航班可达", unreachable.json()["answer"])
             self.assertEqual(unreachable.json()["references"], [])
             self.assertEqual(provider.calls, [])
             missing = self.turn(client, sid, auth, "place-timeout", "推荐 Basel 的经典地点")

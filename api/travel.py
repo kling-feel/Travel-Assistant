@@ -13,7 +13,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from config import settings
-from db.travel_models import travelers
+from db.travel_models import airports, travelers
+from services.location_labels import airport_zh, city_zh
 from services.travel import (OrderError, find_flights, find_hotels, find_rentals,
                              itinerary, policies)
 from services.sessions import (SessionNotFound, append_message,
@@ -118,7 +119,22 @@ def current_demo_state(traveler=Depends(current_traveler),
     return {"as_of": as_of, "bookable_from": as_of + timedelta(days=1),
             "bookable_until": as_of + timedelta(days=30),
             "hotel_checkout_until": as_of + timedelta(days=31),
+            "display_currency": "CNY",
             "simulation_notice": "虚构平台与模拟数据；不连接真实供应商或付款"}
+
+
+@router.get("/locations")
+def location_options(traveler=Depends(current_traveler),
+                     session: Session = Depends(get_db)):
+    """Authenticated display choices; codes and city values stay canonical."""
+    rows = session.execute(select(airports.c.code, airports.c.name,
+                                  airports.c.city, airports.c.timezone)).mappings()
+    result = [{"code": row["code"], "city": row["city"],
+               "city_zh": city_zh(row["city"]),
+               "name": row["name"],
+               "name_zh": airport_zh(row["code"], row["city"]),
+               "timezone": row["timezone"]} for row in rows]
+    return sorted(result, key=lambda item: (item["city_zh"], item["code"]))
 
 
 @router.get("/me/itinerary")
@@ -311,7 +327,7 @@ def conversation_turn(session_id: str, data: TurnRequest,
                     actions.append(jsonable_encoder(card))
                 references = references + [{"type": "action", "id": card["id"]}
                                            for card in actions]
-                answer = (f"已生成 {len(actions)} 张模拟交易待确认卡。"
+                answer = (f"已生成 {len(actions)} 张待确认卡。"
                           "请逐张核对对象、时间、金额和政策，并通过对应动作接口确认或拒绝；"
                           "目前订单尚未改变。")
             except (SelectionNeeded, ActionError) as error:

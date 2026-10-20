@@ -59,7 +59,7 @@ def _product_choice(kind, proposed, groups, text):
     if not candidates:
         if proposed is not None and _explicit_id(text, kind, proposed):
             return proposed
-        raise SelectionNeeded("请先查询并明确选择具体模拟候选。")
+        raise SelectionNeeded("请先查询并明确选择具体候选。")
     ids = [item["id"] for item in candidates]
     if proposed is not None and proposed not in ids:
         raise SelectionNeeded("该产品不在当前候选中，请重新查询并选择。")
@@ -83,7 +83,7 @@ def _product_choice(kind, proposed, groups, text):
     elif proposed is not None and _explicit_id(text, kind, proposed):
         choice = proposed
     else:
-        raise SelectionNeeded("有多个模拟候选，请明确选择班次或产品。")
+        raise SelectionNeeded("有多个候选，请明确选择班次或产品。")
     if proposed is not None and str(proposed) != str(choice):
         raise SelectionNeeded("所选候选与请求不一致，请重新指定。")
     return choice

@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from api.travel import router
 from config import settings
-from db.travel_models import demo_state, metadata, travelers
+from db.travel_models import airports, demo_state, metadata, travelers
 from main import Server
 from utils.dependencies import get_db
 from utils.password_hash import get_hashed_password
@@ -47,6 +47,12 @@ class PageTests(unittest.TestCase):
                     display_name="演示旅客", active=1))
                 connection.execute(insert(demo_state).values(
                     id=1, as_of=date(2026, 10, 20), fixture_sha256="a" * 64))
+                connection.execute(insert(airports), [
+                    {"code": "HAM", "name": "Hamburg Airport", "city": "Hamburg", "timezone": "Europe/Berlin"},
+                    {"code": "BSL", "name": "EuroAirport Basel-Mulhouse-Freiburg", "city": "Basel", "timezone": "Europe/Zurich"},
+                    {"code": "LHR", "name": "London Heathrow Airport", "city": "London", "timezone": "Europe/London"},
+                    {"code": "LGW", "name": "London Gatwick Airport", "city": "London", "timezone": "Europe/London"},
+                ])
             app = FastAPI()
             app.include_router(router, prefix="/api/v1")
 
@@ -57,6 +63,7 @@ class PageTests(unittest.TestCase):
             app.dependency_overrides[get_db] = test_db
             with TestClient(app) as client:
                 self.assertEqual(client.get("/api/v1/demo-state").status_code, 401)
+                self.assertEqual(client.get("/api/v1/locations").status_code, 401)
                 login = client.post("/api/v1/login", json={
                     "username": "page-demo", "password": "page-password"})
                 self.assertEqual(login.status_code, 200)
@@ -66,6 +73,14 @@ class PageTests(unittest.TestCase):
                 self.assertEqual(first.json()["bookable_from"], "2026-10-21")
                 self.assertEqual(first.json()["bookable_until"], "2026-11-19")
                 self.assertEqual(first.json()["hotel_checkout_until"], "2026-11-20")
+                self.assertEqual(first.json()["display_currency"], "CNY")
+                locations = client.get("/api/v1/locations", headers=auth)
+                self.assertEqual(locations.status_code, 200)
+                by_code = {item["code"]: item for item in locations.json()}
+                self.assertEqual(by_code["BSL"]["city_zh"], "巴塞尔")
+                self.assertEqual(by_code["BSL"]["name_zh"], "巴塞尔米卢斯机场")
+                self.assertNotEqual(by_code["LHR"]["name_zh"], by_code["LGW"]["name_zh"])
+                self.assertEqual(by_code["HAM"]["city"], "Hamburg")
                 with engine.begin() as connection:
                     connection.execute(update(demo_state).values(as_of=date(2026, 11, 1)))
                 second = client.get("/api/v1/demo-state", headers=auth)

@@ -1,11 +1,13 @@
 """Bounded, traveler-scoped evidence for the read-only conversation graph."""
 
-from datetime import date
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from db.travel_models import chat_turns, demo_state
+from db.travel_models import airports, chat_turns, demo_state
 from services.actions import ActionNotFound, get_proposal
+from services.location_labels import airport_zh, amount_zh, city_zh, product_zh, room_zh
 from services.sessions import _owned_session
 from services.travel import (OrderError, find_flights, find_hotels, find_rentals,
                              itinerary, policies)
@@ -31,6 +33,31 @@ def _result(answer, references=()):
     return {"answer": answer, "references": list(references)}
 
 
+def _airport(db, code):
+    row = db.execute(select(airports.c.city, airports.c.timezone).where(
+        airports.c.code == code)).one_or_none()
+    return (airport_zh(code, row.city), row.timezone, row.city) if row else (code, None, "")
+
+
+def _local_time(value, zone):
+    if not zone:
+        return value.isoformat() if isinstance(value, datetime) else str(value)
+    stamp = value if isinstance(value, datetime) else datetime.fromisoformat(value)
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(ZoneInfo(zone)).strftime("%Y-%m-%d %H:%M（当地）")
+
+
+_ACTION_NAMES = {"flight_book": "预订机票", "flight_change": "改签机票",
+                 "flight_cancel": "取消机票", "hotel_book": "预订酒店",
+                 "hotel_change": "修改酒店", "hotel_cancel": "取消酒店",
+                 "rental_book": "预订租车", "rental_change": "修改租车日期",
+                 "rental_cancel": "取消租车"}
+_STATUS_NAMES = {"pending": "待确认", "confirmed": "已确认",
+                 "rejected": "已拒绝", "expired": "已过期",
+                 "cancelled": "已取消", "canceled": "已取消"}
+
+
 def read_action_guidance(db, traveler_id, session_id, mode):
     """Explain the latest displayed cards without confirming or rejecting them."""
     _owned_session(db, traveler_id, session_id)
@@ -52,10 +79,10 @@ def read_action_guidance(db, traveler_id, session_id, mode):
     references = [{"type": "action", "id": card["id"], "status": card["status"]}
                   for card in current]
     details = "；".join(
-        f"{card['action_type']} 卡 {card['id']}（当前状态 {card['status']}，"
+        f"{_ACTION_NAMES.get(card['action_type'], card['action_type'])}卡 {card['id']}（当前状态 {_STATUS_NAMES.get(card['status'], card['status'])}，"
         f"目标订单 {card.get('target_order_id') or '新订单'}，"
-        f"模拟应补 {card['price'].get('payable', 0)}、应退 "
-        f"{card['price'].get('refundable', 0)}）" for card in current)
+        f"需补 {amount_zh(card['price'].get('payable', 0))}、可退 "
+        f"{amount_zh(card['price'].get('refundable', 0))}）" for card in current)
     pending = [card for card in current if card["status"] == "pending"]
     if mode == "withdraw":
         advice = ("如要撤回，请对每张仍待确认的卡分别调用对应的拒绝接口；"
@@ -66,7 +93,7 @@ def read_action_guidance(db, traveler_id, session_id, mode):
                   "口头同意或付款表达不会执行订单，也不会重复生成卡。"
                   "如还想办理新的交易，请下一轮单独说明对象和条件。"
                   if pending else "这些卡目前已非待确认状态，请重新查询后再提出新交易。")
-    return _result(f"最近生成的模拟交易卡：{details}。{advice}", references)
+    return _result(f"最近生成的待确认卡：{details}。{advice}", references)
 
 
 def read_for_assistant(db, traveler_id, intent, params):
@@ -81,12 +108,26 @@ def read_for_assistant(db, traveler_id, intent, params):
             if not orders:
                 parts.append(f"{label}：暂无订单")
                 continue
-            parts.append(f"{label}：" + "；".join(
-                f"{item['id']}（{item['status']}）" for item in orders))
+            if kind == "flight_orders":
+                descriptions = [
+                    f"{_airport(db, item['departure_airport'])[0]} → {_airport(db, item['arrival_airport'])[0]}"
+                    f"（航班 {item['flight_no']}，订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}）"
+                    for item in orders]
+            elif kind == "hotel_orders":
+                descriptions = [
+                    f"{product_zh(item['name'], city=item['city'])} {room_zh(item['room_type'])}"
+                    f"（{item['check_in']} 入住，订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}）"
+                    for item in orders]
+            else:
+                descriptions = [
+                    f"{product_zh(item['name'], city=_airport(db, item['airport_code'])[2], airport=item['airport_code'])}"
+                    f"（订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}）"
+                    for item in orders]
+            parts.append(f"{label}：" + "；".join(descriptions))
             references.extend({"type": "order", "id": item["id"], "kind": kind,
                                "version": item["version"], "status": item["status"]}
                               for item in orders)
-        return _result("本人模拟行程。" + "；".join(parts), references)
+        return _result("我的行程：" + "；".join(parts), references)
 
     if intent == "policy":
         scope = _as_text(params.get("scope"), 16)
@@ -110,19 +151,21 @@ def read_for_assistant(db, traveler_id, intent, params):
         arrival = _as_text(params.get("arrival"), 8)
         travel_date = _as_date(params.get("travel_date"))
         if not departure or not arrival or not travel_date:
-            return _result("请提供出发机场代码、到达机场代码和出行日期，才能查模拟航班。")
+            return _result("请提供出发地、目的地和出行日期，以便查询航班。")
         sort = "price" if params.get("sort") == "price" else "departure"
         try:
             rows = find_flights(db, departure.upper(), arrival.upper(), travel_date,
                                 limit=3, sort=sort)
         except OrderError:
-            return _result("航班查询条件无效，请核对机场代码和日期。")
+            return _result("航班查询条件无效，请核对出发地、目的地和日期。")
         if not rows:
-            return _result("该日期和航线没有可预订的模拟航班。")
+            return _result("该日期和航线没有可预订的航班。")
         return _result(
-            "找到以下模拟航班（金额为演示计价单位）：" + "；".join(
-                f"{row['flight_no']}（ID {row['id']}，{row['departure_at'].isoformat()} 起飞，"
-                f"模拟报价 {row['demo_fare_amount']}）" for row in rows),
+            "找到以下航班：" + "；".join(
+                f"{_airport(db, row['departure_airport'])[0]} → {_airport(db, row['arrival_airport'])[0]}，"
+                f"航班 {row['flight_no']}（候选 {row['id']}，"
+                f"当地出发 {_local_time(row['departure_at'], _airport(db, row['departure_airport'])[1])}，"
+                f"参考报价 {amount_zh(row['demo_fare_amount'])}）" for row in rows),
             [{"type": "flight", "id": row["id"], "offer_version": row["offer_version"],
               "price": row["demo_fare_amount"], "travel_date": travel_date.isoformat()}
              for row in rows],
@@ -133,7 +176,7 @@ def read_for_assistant(db, traveler_id, intent, params):
         check_in = _as_date(params.get("check_in"))
         check_out = _as_date(params.get("check_out"))
         if not city or not check_in or not check_out:
-            return _result("请提供城市、入住日期和退房日期，才能查模拟酒店。")
+            return _result("请提供城市、入住日期和退房日期，以便查询酒店。")
         airport = _as_text(params.get("airport"), 8)
         sort = "distance" if airport and params.get("sort") == "distance" else "price"
         try:
@@ -142,11 +185,11 @@ def read_for_assistant(db, traveler_id, intent, params):
         except OrderError:
             return _result("酒店查询条件无效，请核对城市和日期。")
         if not rows:
-            return _result("该城市和日期没有可用的模拟酒店产品。")
+            return _result("该城市和日期没有可用的酒店房型。")
         return _result(
-            "找到以下虚构酒店产品（每晚为演示计价单位）：" + "；".join(
-                f"{row['name']} {row['room_type']}（产品 {row['product_id']}，"
-                f"每晚 {row['nightly_price']}）" for row in rows),
+            "找到以下酒店房型：" + "；".join(
+                f"{product_zh(row['name'], city=row['city'])} {room_zh(row['room_type'])}"
+                f"（产品 {row['product_id']}，每晚 {amount_zh(row['nightly_price'])}）" for row in rows),
             [{"type": "hotel_product", "id": row["product_id"],
               "price": row["nightly_price"], "distance_km": row.get("distance_km"),
               "check_in": check_in.isoformat(), "check_out": check_out.isoformat()}
@@ -159,7 +202,7 @@ def read_for_assistant(db, traveler_id, intent, params):
         pickup = _as_date(params.get("pickup_date"))
         dropoff = _as_date(params.get("drop_off_date"))
         if (not city and not airport) or not pickup or not dropoff:
-            return _result("请提供取车城市或机场，以及取车和还车日期，才能查模拟租车。")
+            return _result("请提供取车地点，以及取车和还车日期，以便查询租车。")
         try:
             rows = find_rentals(db, pickup, dropoff, city=city,
                                 airport=airport.upper() if airport else None,
@@ -167,10 +210,11 @@ def read_for_assistant(db, traveler_id, intent, params):
         except OrderError:
             return _result("租车查询条件无效，请核对地点和日期。")
         if not rows:
-            return _result("该地点和日期没有可用的模拟租车产品。")
+            return _result("该地点和日期没有可用的车辆。")
         return _result(
-            "找到以下虚构租车产品（每日为演示计价单位）：" + "；".join(
-                f"{row['name']}（产品 {row['id']}，每日 {row['daily_price']}）"
+            "找到以下车辆：" + "；".join(
+                f"{product_zh(row['name'], city=row['city'], airport=row['airport_code'])}"
+                f"（产品 {row['id']}，每日 {amount_zh(row['daily_price'])}）"
                 for row in rows),
             [{"type": "rental_product", "id": row["id"],
               "price": row["daily_price"], "pickup_date": pickup.isoformat(),

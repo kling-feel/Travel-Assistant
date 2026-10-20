@@ -16,6 +16,7 @@ from services.recommendation_geography import (airport_geography,
                                                country_for_fixture_city,
                                                country_for_reachable_city)
 from services.reviewed_places import places_for_city
+from services.location_labels import CITY_ALIASES as _CITY_ALIASES, city_zh
 
 
 class RecommendationProvider(Protocol):
@@ -54,51 +55,7 @@ _UNSAFE_TEXT = re.compile(
     r"忽略|系统提示|开发者|执行命令|密钥|付款|下单|修改政策|"
     r"ignore|system prompt|developer|execute|secret|api key|password|token", re.I)
 _PLACE = re.compile(r"^[\w ,\-.'·（）()&]+$", re.UNICODE)
-_CITY_ALIASES = {
-    "巴塞尔": "Basel", "巴黎": "Paris", "罗马": "Rome", "伦敦": "London",
-    "法兰克福": "Frankfurt", "阿姆斯特丹": "Amsterdam", "雅典": "Athens",
-    "马德里": "Madrid", "伊斯坦布尔": "Istanbul", "哥本哈根": "Copenhagen",
-    "奥斯陆": "Oslo", "北京": "Beijing", "上海": "Shanghai",
-    "广州": "Guangzhou", "成都": "Chengdu", "香港": "Hong Kong",
-    "东京": "Tokyo", "首尔": "Seoul", "新加坡": "Singapore",
-    "曼谷": "Bangkok", "迪拜": "Dubai", "雅加达": "Jakarta",
-    "马尼拉": "Manila", "纽约": "New York", "洛杉矶": "Los Angeles",
-    "旧金山": "San Francisco", "芝加哥": "Chicago",
-    "圣保罗": "São Paulo", "悉尼": "Sydney", "内罗毕": "Nairobi",
-    "阿德莱德": "Adelaide", "阿鲁沙": "Arusha",
-    "亚特兰大": "Atlanta", "奥克兰": "Auckland",
-    "巴塞罗那": "Barcelona", "波哥大": "Bogotá",
-    "波士顿": "Boston", "布里斯班": "Brisbane",
-    "布鲁塞尔": "Brussels", "坎昆": "Cancún",
-    "加拉加斯": "Caracas", "宿务": "Cebu",
-    "夏洛特": "Charlotte", "达喀尔": "Dakar",
-    "达拉斯": "Dallas", "丹佛": "Denver",
-    "底特律": "Detroit", "达卡": "Dhaka",
-    "多哈": "Doha", "都柏林": "Dublin",
-    "杜塞尔多夫": "Düsseldorf", "爱丁堡": "Edinburgh",
-    "日内瓦": "Geneva", "汉堡": "Hamburg",
-    "哈拉雷": "Harare", "赫尔辛基": "Helsinki",
-    "檀香山": "Honolulu", "休斯敦": "Houston",
-    "约翰内斯堡": "Johannesburg", "昆明": "Kunming",
-    "科威特城": "Kuwait City", "拉斯维加斯": "Las Vegas",
-    "利马": "Lima", "里斯本": "Lisbon",
-    "罗安达": "Luanda", "马赛": "Marseille",
-    "墨尔本": "Melbourne", "墨西哥城": "Mexico City",
-    "迈阿密": "Miami", "明尼阿波利斯": "Minneapolis",
-    "莫斯科": "Moscow", "孟买": "Mumbai",
-    "慕尼黑": "Munich", "名古屋": "Nagoya",
-    "新德里": "New Delhi", "纽瓦克": "Newark",
-    "奥兰多": "Orlando", "帕皮提": "Papeete",
-    "槟城": "Penang", "珀斯": "Perth",
-    "金边": "Phnom Penh", "菲尼克斯": "Phoenix",
-    "普吉": "Phuket", "布拉格": "Prague",
-    "里加": "Riga", "里约热内卢": "Rio de Janeiro",
-    "盐湖城": "Salt Lake City", "圣迭戈": "San Diego",
-    "圣萨尔瓦多": "San Salvador", "西雅图": "Seattle",
-    "暹粒": "Siem Reap", "斯德哥尔摩": "Stockholm",
-    "维多利亚": "Victoria", "华盛顿": "Washington, D.C.",
-    "仰光": "Yangon",
-}
+
 
 _SEARCH_URL = "https://cloud-iqs.aliyuncs.com/search/unified"
 _SEARCH_TERMS = {
@@ -530,12 +487,12 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
 
     def result(answer, references=()):
         if excursion_action:
-            answer = "本演示不支持游览预订、改期或取消。" + answer
+            answer = "当前不支持游览预订、改期或取消。" + answer
         return {"answer": answer, "references": list(references)}
 
     cities = reachable_cities(db)
     if not cities:
-        return result("当前模拟航班网络没有可核实的可达城市，暂无法推荐地点。")
+        return result("当前航班网络没有可核实的可达城市，暂无法推荐地点。")
     as_of = db.execute(select(demo_state.c.as_of).where(
         demo_state.c.id == 1)).scalar_one_or_none() or date.today()
     owned = [city for city in _owned_destinations(db, traveler_id, as_of) if city in cities]
@@ -545,19 +502,19 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
     city = explicit
     candidate_mentioned = bool(candidate and _mentioned(user_text, candidate))
     if city is None and candidate_mentioned and candidate.isascii():
-        alternatives = "、".join(owned[:3] or cities[:3])
-        return result(f"该城市不在当前模拟航班可达城市范围内。可考虑 {alternatives}；请指定其中一座城市后再查询有来源的地点。")
+        alternatives = "、".join(city_zh(name) for name in (owned[:3] or cities[:3]))
+        return result(f"该城市不在当前航班可达城市范围内。可考虑 {alternatives}；请指定其中一座城市后再查询有来源的地点。")
     if city is None and candidate_mentioned:
-        return result("暂无法匹配这个城市的演示航班资料；请补充机场代码或英文城市名。")
+        return result("暂无法匹配这个城市的航班资料；请补充城市或机场名称。")
     if city is None and candidate:
-        return result("无法核对本轮目的地；请明确英文城市名或机场代码。")
+        return result("无法核对本轮目的地；请明确城市或机场名称。")
     if city is None:
         if len(owned) == 1:
             city = owned[0]
         elif len(owned) > 1:
-            return result(f"你的已确认行程涉及 {'、'.join(owned[:5])}。请指定想了解哪座城市的经典地点。")
+            return result(f"你的已确认行程涉及 {'、'.join(city_zh(name) for name in owned[:5])}。请指定想了解哪座城市的经典地点。")
         else:
-            return result(f"请指定目的地城市；当前演示网络可达城市例如 {'、'.join(cities[:3])}。地点需有来源后才能推荐。")
+            return result(f"请指定目的地城市；当前可达城市例如 {'、'.join(city_zh(name) for name in cities[:3])}。地点需有来源后才能推荐。")
     mentioned = {name for name in cities if _mentioned(user_text, name)}
     mentioned.update(name for alias, name in _CITY_ALIASES.items()
                      if alias in user_text and name in cities)
@@ -565,7 +522,7 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
         return result("你提到了多座城市，请指定本轮要推荐哪一座。")
     country = country_for_reachable_city(db, city)
     if country is None:
-        return result(f"{city} 的国家或地区无法从当前模拟航班资料唯一核实，暂不联网推荐地点。")
+        return result(f"{city_zh(city)} 的国家或地区无法从当前航班资料唯一核实，暂不联网推荐地点。")
     preference = next((category for word, category in _PREFERENCES.items()
                        if word in user_text), None)
     source = provider or get_recommendation_provider()
@@ -595,7 +552,7 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
             evidence.sort(key=lambda item: item["category"] != preference)
     if not evidence:
         if catalog and preference and failure is None:
-            return result(f"{city} 暂无近期核查的{_CATEGORIES[preference]}主题地点；请换个偏好或城市。")
+            return result(f"{city_zh(city)} 暂无近期核查的{_CATEGORIES[preference]}主题地点；请换个偏好或城市。")
         reasons = {
             "unconfigured": "尚未配置联网搜索",
             "authentication": "联网搜索认证或服务开通异常",
@@ -606,19 +563,19 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
             "catalog": "地点目录校验异常",
         }
         detail = reasons.get(failure, "当前来源不足")
-        answer = (f"{city} 在当前模拟航班网络覆盖内，但{detail}，目前无法核实经典地点的可靠来源，"
+        answer = (f"{city_zh(city)} 在当前航班网络覆盖内，但{detail}，目前无法核实经典地点的可靠来源，"
                   "暂不编造地点信息。")
         return result(answer)
-    prefix = f"根据已核对的来源，{city} 可考虑以下地点（仅供旅行建议）："
+    prefix = f"根据已核对的来源，{city_zh(city)} 可考虑以下地点（仅供旅行建议）："
     if catalog:
         reviewed_on = max(item["reviewed_on"] for item in evidence)
-        prefix = f"根据截至 {reviewed_on} 人工核查的地点资料，{city} 可考虑（仅供旅行建议）："
+        prefix = f"根据截至 {reviewed_on} 人工核查的地点资料，{city_zh(city)} 可考虑（仅供旅行建议）："
         if source.live_status not in ("disabled", "matched"):
             prefix = "实时检索未能核实新资料，已回退至人工核查目录。" + prefix
     if getattr(source, "test_only", False):
         prefix = "固定证据测试输出，地点和链接仅用于验收，不能作为实时旅行资料。" + prefix
     if city in owned:
-        prefix = f"结合你已确认的 {city} 行程，" + prefix
+        prefix = f"结合你已确认的 {city_zh(city)} 行程，" + prefix
     if "酒店" in user_text and re.search(r"附近|距离|多远|几公里|公里|步行|车程", user_text):
         prefix += "目前缺少已核实的地点坐标，无法判断这些地点与酒店的距离。"
     if re.search(r"门票|票价|价格|多少钱|费用", user_text):

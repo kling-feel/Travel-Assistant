@@ -61,10 +61,10 @@ def preview_app():
         connection.execute(insert(travelers), [
             {"id": "preview-1", "username": "demo1",
              "password_hash": get_hashed_password("password1"),
-             "display_name": "演示旅客一", "active": 1},
+             "display_name": "旅客一", "active": 1},
             {"id": "preview-2", "username": "demo2",
              "password_hash": get_hashed_password("password2"),
-             "display_name": "演示旅客二", "active": 1},
+             "display_name": "旅客二", "active": 1},
         ])
         connection.execute(insert(demo_state).values(
             id=1, as_of=today, fixture_sha256="0" * 64))
@@ -89,13 +89,13 @@ def preview_app():
             id="preview-flight-1", traveler_id="preview-1", flight_id=1,
             amount=100, status="confirmed", version=1))
         connection.execute(insert(hotels).values(
-            id=1, name="Fictional Basel Hotel", city="Basel", price_tier="Budget",
+            id=1, name="虚构·Basel机场周边酒店 1", city="Basel", price_tier="Budget",
             nearby_airport="BSL"))
         connection.execute(insert(hotel_products).values(
-            id="room-1", hotel_id=1, room_type="Standard", nightly_price=80,
+            id="room-1", hotel_id=1, room_type="演示标准间", nightly_price=80,
             available_from=tomorrow, available_until=tomorrow + timedelta(days=30)))
         connection.execute(insert(rental_products).values(
-            id="car-1", name="Fictional City Car", airport_code="BSL", city="Basel",
+            id="car-1", name="虚构·BSL机场租车 1", airport_code="BSL", city="Basel",
             vehicle_type="Compact", daily_price=50, latitude=47.59,
             longitude=7.61, available_from=tomorrow,
             available_until=tomorrow + timedelta(days=30), generation_rule="preview-v1"))

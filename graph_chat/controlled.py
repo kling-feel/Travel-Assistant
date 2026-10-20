@@ -55,7 +55,7 @@ class TurnState(TypedDict, total=False):
 def _safe_general(draft):
     if (not isinstance(draft, str) or not 1 <= len(draft.strip()) <= 500
             or re.search(r"\d|已预订|已改签|已取消|付款成功|退款成功|票价|航司政策|开放时间", draft)):
-        return "我可以帮你查询本人模拟行程、航班、酒店、租车和虚构平台政策。请告诉我具体需求。"
+        return "我可以帮你查询行程、航班、酒店、租车和本平台政策。请告诉我具体需求。"
     return draft.strip()
 
 
@@ -106,7 +106,7 @@ def build_graph(model, read_evidence, checkpointer):
             intent, params, draft = "recommendation", params, ""
         if intent == "general":
             if re.search(r"预订|改签|取消|退款|下单|订票|订房|景点|推荐|政策|订单|航班|酒店|租车", user_text):
-                draft = "请说明你要查询本人行程、虚构政策、模拟候选，还是希望办理交易。"
+                draft = "请说明你要查询行程、平台政策、航班酒店租车候选，还是希望办理订单变更。"
         return {"intent": intent, "params": params, "draft": draft or ""}
 
     def general(state: TurnState):

@@ -79,7 +79,7 @@ class FullCatalogTests(unittest.TestCase):
                     db, "t1", "推荐 Toronto 的景点", {"city": "Toronto"},
                     ReviewedCatalogProvider())
                 self.assertEqual(outside["references"], [])
-                self.assertIn("不在当前模拟航班可达城市", outside["answer"])
+                self.assertIn("不在当前航班可达城市", outside["answer"])
         finally:
             fixture.tearDown()
 
