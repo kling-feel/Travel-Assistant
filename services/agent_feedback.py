@@ -123,6 +123,9 @@ def cancellation_overview(db, traveler_id):
                              "parameters": {"order_id": order["id"]}})
     if not lines:
         return "你目前没有已确认的机票或酒店订单可供核对。", []
+    hidden = max(len(lines) - 12, 0)
+    if hidden:
+        lines = [*lines[:12], f"另有 {hidden} 笔订单未在本轮展开；请指定订单号继续核对。"]
     tail = ("本轮最多生成两张待确认卡；其他可办理订单请下一轮单独提出。"
             if len(eligible) > 2 else "订单尚未改变；可办理的项目仍须逐张确认。")
     return "\n".join([*lines, tail]), eligible[:2]
