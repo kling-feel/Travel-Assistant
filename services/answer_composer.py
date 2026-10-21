@@ -42,9 +42,13 @@ def compose_verified_answer(model, intent, user_text, answer, references):
     choices = _next_steps(intent, answer, references)
     label = _SEARCH_LABELS.get(intent)
     list_header = (label[0].split("：", 1)[0] if label else "")
+    reference_kind = {"flight_search": "flight", "hotel_search": "hotel_product",
+                      "rental_search": "rental_product"}.get(intent)
+    candidate_count = sum(row.get("type") == reference_kind for row in references)
     can_list = bool(label and answer.startswith(list_header)
-                    and answer.count("；") in (1, 2)
-                    and not (intent == "rental_search" and "。请" in answer))
+                    and candidate_count in (2, 3)
+                    and answer.count("；") == candidate_count - 1
+                    and not any(marker in answer for marker in ("。请", "。已记下")))
     if not choices and not can_list:
         return answer
     prompt = ("你只负责选择已有事实的呈现方式，不要撰写事实或交易结论。"

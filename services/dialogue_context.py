@@ -22,10 +22,11 @@ _CLOCK = re.compile(r"(凌晨|早上|上午|中午|下午|晚上)?\s*(\d{1,2})(?
 def requested_actions(text: str) -> list[str]:
     """Recognize explicit writes without treating policy questions as orders."""
     if (not _WRITE.search(text) or re.search(r"政策|规则|条款|手续费|怎么|如何", text)
+            or re.search(r"(?:取消|改签|改期).{0,18}(?:多少|几成|几元|费用|收费)", text)
             or re.search(r"不(?:要|想|用)?(?:预订|预定|订票|订房|订车|取消)", text)
             or re.search(r"(?:能|可以).{0,12}(?:取消|改期|改签).{0,2}吗", text)):
         return []
-    domains = [("flight", r"机票|航班|班机|班次|订票"),
+    domains = [("flight", r"机票|航班|班机|班次|订票|(?:最早|最便宜|那|这|前面|刚才).{0,4}班"),
                ("hotel", r"酒店|房间|房型|住宿|订房"),
                ("rental", r"租车|车辆|车子|订车")]
     actions = []

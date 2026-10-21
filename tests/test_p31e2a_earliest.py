@@ -9,7 +9,7 @@ from sqlalchemy import insert, select, update
 from db.travel_models import (airports, audit_events, flight_offers, flight_orders,
                               flights, pending_actions)
 from services.actions import create_proposal
-from services.dialogue_context import read_request
+from services.dialogue_context import read_request, requested_actions
 from services.travel import find_earliest_flights
 from tests import test_p26a_dialogue as dialogue_cases
 from tests import test_p31e1_transaction_journey as prior_cases
@@ -143,6 +143,51 @@ class EarliestJourneyTests(unittest.TestCase):
             self.assertEqual(len(db.execute(select(pending_actions.c.id)).all()), 1)
             self.assertEqual(len(db.execute(select(audit_events.c.id).where(
                 audit_events.c.event_type == "proposed")).all()), 1)
+
+    def test_earliest_flight_with_landing_hotel_keeps_booking(self):
+        self.assertEqual(requested_actions("就预订最早那班，顺便找落地附近酒店"),
+                         ["flight_book"])
+        model = dialogue_cases.ScriptedModel(
+            {"intent": "transaction", "params": {
+                "actions": [{"action_type": "flight_book", "parameters": {}}],
+                "queries": [{"intent": "hotel_search", "params": {}}]},
+             "answer": ""})
+        client, model_patch, saver_patch = self.fixture.fixture.client(model)
+        original = find_earliest_flights
+
+        def fixed_search(db, departures, arrivals, **kwargs):
+            return original(db, departures, arrivals, now=NOW, **kwargs)
+
+        with (model_patch, saver_patch,
+              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("services.agent_reads.find_earliest_flights", side_effect=fixed_search),
+              client):
+            auth = self.fixture.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            found = self.fixture.fixture.turn(client, sid, auth, "e4-early-search",
+                                              "从上海到伦敦最早什么时候能走")
+            self.assertEqual(found.status_code, 200, found.text)
+            booked = self.fixture.fixture.turn(client, sid, auth, "e4-early-hotel",
+                                               "就预订最早那班，顺便找落地附近酒店")
+            self.assertEqual(booked.status_code, 200, booked.text)
+            self.assertEqual([row["action_type"] for row in booked.json()["actions"]],
+                             ["flight_book"])
+            self.assertEqual(booked.json()["actions"][0]["parameters"]["flight_id"],
+                             3832)
+            self.assertIn("入住日期", booked.json()["answer"])
+            self.assertEqual(booked.json()["answer"].count("已核对航班落地"), 1)
+            continued = self.fixture.fixture.turn(client, sid, auth, "e4-landing-stay",
+                                                  "落地当天入住，住两晚，找附近酒店")
+            self.assertEqual(continued.status_code, 200, continued.text)
+            self.assertIn("入住", continued.json()["answer"])
+            self.assertNotIn("明确选择班次", continued.json()["answer"])
+            self.assertNotIn("还需要入住日期", continued.json()["answer"])
+            policy = self.fixture.fixture.turn(client, sid, auth, "e4-policy-cost",
+                                               "机票取消要收多少费用？")
+            self.assertEqual(policy.status_code, 200, policy.text)
+            self.assertTrue(any(ref.get("type") == "policy"
+                                for ref in policy.json()["references"]))
+            self.assertEqual(policy.json()["actions"], [])
 
     def test_tie_requires_choice(self):
         with self.engine.begin() as db:

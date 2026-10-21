@@ -115,6 +115,10 @@ def _chosen_landing(candidates, text):
         return flights[order[match.group(1)]]
     if match:
         return None
+    if "最早" in text:
+        marked = [item for item in flights if item.get("earliest_unique")]
+        if len(marked) == 1:
+            return marked[0]
     if len(flights) == 1:
         return flights[0]
     return None
@@ -139,6 +143,13 @@ def build_graph(model, read_evidence, checkpointer):
         writes = requested_actions(user_text)
         direct_intent, direct_params, direct_context = read_request(
             user_text, "general", {}, prior_context, base)
+        if (not writes and re.search(r"(?:取消|改签|改期).{0,18}(?:多少|几成|几元|费用|收费)",
+                                     user_text)):
+            scope = ("flight" if re.search(r"机票|航班|班机", user_text) else
+                     "hotel" if re.search(r"酒店|房间|住宿", user_text) else
+                     "rental" if re.search(r"租车|车辆", user_text) else None)
+            if scope:
+                return {"intent": "policy", "params": {"scope": scope}, "draft": ""}
         landing = bool(re.search(r"落地|到达后|目的地", user_text))
         nearby = "附近" in user_text or "周边" in user_text or landing
         lodging = bool(re.search(r"酒店|住宿|住哪|订房", user_text))
@@ -151,6 +162,11 @@ def build_graph(model, read_evidence, checkpointer):
                 if not flight_candidates:
                     flight_candidates = read_evidence("landing_context", {})["references"]
                 selected = _chosen_landing(flight_candidates, user_text)
+                if not selected and not re.search(r"SIM-\d+|第\s*[一二三123]\s*(?:个|班|趟)?", user_text, re.I):
+                    hotel_task = (state.get("task_contexts") or {}).get("hotel_search") or {}
+                    landing_id = hotel_task.get("_landing_flight_id")
+                    selected = next((item for item in flight_candidates
+                                     if item.get("id") == landing_id), None)
                 if not selected:
                     return {"intent": "general", "params": {}, "draft":
                             "请先从已查到的航班中明确选择班次，我才能核对落地机场和当地到达日。"}
@@ -160,6 +176,19 @@ def build_graph(model, read_evidence, checkpointer):
                              "_landing_flight_id": selected["id"],
                              "suggested_check_in": selected["arrival_date"],
                              "sort": "distance"}
+                    dates = mentioned_dates(user_text, base)
+                    same_day = bool(re.search(r"(?:落地|到达)(?:当|那)天", user_text))
+                    if same_day and dates and dates[0].isoformat() != selected["arrival_date"]:
+                        return {"intent": "general", "params": {}, "draft":
+                                "你说的落地当天与已核对航班的当地到达日不一致，请确认入住日期。"}
+                    if dates or same_day and re.search(r"入住|住", user_text):
+                        hotel["check_in"] = (dates[0].isoformat() if dates
+                                             else selected["arrival_date"])
+                    nights = stay_nights(user_text, dates)
+                    if nights and hotel.get("check_in"):
+                        hotel["nights"] = nights
+                        hotel["check_out"] = (date.fromisoformat(hotel["check_in"])
+                                              + timedelta(days=nights)).isoformat()
                     tasks = dict(state.get("task_contexts") or {})
                     tasks["hotel_search"] = hotel
                     return {"intent": "hotel_search", "params": hotel, "context": hotel,
@@ -340,7 +369,10 @@ def build_graph(model, read_evidence, checkpointer):
             queries = params.get("queries", []) if intent == "transaction" else []
             if not isinstance(queries, list):
                 queries = []
-            if ("flight_book" in writes and re.search(r"(?:顺便|再|同时).{0,8}(?:找|查|看看).{0,18}酒店", user_text)):
+            if ("flight_book" in writes
+                    and re.search(r"(?:顺便|再|同时).{0,8}(?:找|查|看看).{0,18}酒店", user_text)
+                    and not any(isinstance(query, dict) and query.get("intent") == "hotel_search"
+                                for query in queries)):
                 cities = mentioned_cities(user_text)
                 queries.append({"intent": "hotel_search", "params":
                                 {"city": cities[-1]} if cities else {}})

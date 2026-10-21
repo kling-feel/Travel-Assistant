@@ -54,6 +54,17 @@ class AnswerComposerTests(unittest.TestCase):
             self.assertIn(fact, result)
         self.assertIn("待确认卡", result)
 
+    def test_rental_guidance_is_not_numbered_as_an_extra_vehicle(self):
+        answer = ("找到以下车辆：浦东经济型（产品 rental-1，每日 ¥83）；"
+                  "虹桥经济型（产品 rental-2，每日 ¥94）。已记下当地取车 10:00、"
+                  "还车 18:00；请核对车辆和时刻后提出预订。")
+        refs = [{"type": "rental_product", "id": "rental-1"},
+                {"type": "rental_product", "id": "rental-2"}]
+        result = compose_verified_answer(
+            PlanModel({"layout": "list", "next": "none"}),
+            "rental_search", "上海租车", answer, refs)
+        self.assertEqual(result, answer)
+
     def test_bad_plan_and_provider_failure_fall_back_exactly(self):
         answer = "目前没有未来待出发的已确认机票。"
         for bad in ({"layout": "plain", "next": "已预订机票"},
