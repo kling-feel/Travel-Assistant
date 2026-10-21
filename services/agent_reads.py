@@ -66,6 +66,15 @@ def _airports_for(db, value):
     ).order_by(airports.c.code).limit(5)).scalars().all()
 
 
+def _arrival_detail(db, flight):
+    _, zone, city = _airport(db, flight["arrival_airport"])
+    stamp = flight["arrival_at"].replace(
+        tzinfo=flight["arrival_at"].tzinfo or timezone.utc)
+    return {"id": flight["id"], "departure_airport": flight["departure_airport"],
+            "arrival_airport": flight["arrival_airport"], "arrival_city": city,
+            "arrival_date": stamp.astimezone(ZoneInfo(zone)).date().isoformat()}
+
+
 _ACTION_NAMES = {"flight_book": "预订机票", "flight_change": "改签机票",
                  "flight_cancel": "取消机票", "hotel_book": "预订酒店",
                  "hotel_change": "修改酒店", "hotel_cancel": "取消酒店",
@@ -116,14 +125,37 @@ def read_action_guidance(db, traveler_id, session_id, mode):
 
 def read_for_assistant(db, traveler_id, intent, params):
     """Never accept owner, price, or policy content from model parameters."""
+    if intent == "landing_context":
+        now = datetime.now(timezone.utc)
+        orders = [item for item in itinerary(db, traveler_id)["flight_orders"]
+                  if item["status"] == "confirmed" and item["arrival_at"].replace(
+                      tzinfo=item["arrival_at"].tzinfo or timezone.utc) > now]
+        if len(orders) != 1:
+            return _result("请先明确要乘坐的未来航班。")
+        flight = orders[0]
+        _, zone, city = _airport(db, flight["arrival_airport"])
+        if not zone:
+            return _result("无法核对已确认航班的到达机场。")
+        local_day = flight["arrival_at"].replace(
+            tzinfo=flight["arrival_at"].tzinfo or timezone.utc
+        ).astimezone(ZoneInfo(zone)).date().isoformat()
+        return _result("已核对本人唯一的未来已确认航班。", [{
+            "type": "flight", "id": flight["flight_id"],
+            "arrival_airport": flight["arrival_airport"],
+            "arrival_city": city, "arrival_date": local_day}])
     if intent == "itinerary":
         rows = itinerary(db, traveler_id)
         question = _as_text(params.get("_user_text"), 4000) or ""
-        if any(word in question for word in ("现在", "还有", "要出发", "出发吗")):
+        if any(word in question for word in ("现在", "还有", "要出发", "出发吗",
+                                              "最近", "近期", "接下来", "未来")):
             now = datetime.now(timezone.utc)
+            flight_only_question = any(word in question for word in ("机票", "航班", "出发"))
+            def after_now(stamp):
+                return stamp.replace(tzinfo=stamp.tzinfo or timezone.utc) > now
             active = [item for item in rows["flight_orders"] if item["status"] == "confirmed"
-                      and item["departure_at"].replace(tzinfo=item["departure_at"].tzinfo or timezone.utc) > now]
-            if not any(word in question for word in ("机票", "航班", "出发")):
+                      and after_now(item["departure_at"] if flight_only_question
+                                    else item["arrival_at"])]
+            if not flight_only_question:
                 active_hotels = [item for item in rows["hotel_orders"] if item["status"] == "confirmed"
                                  and item["check_out"] > _hotel_today(db, item["product_id"], now)]
                 active_rentals = [item for item in rows["rental_orders"] if item["status"] == "confirmed"
@@ -265,7 +297,8 @@ def read_for_assistant(db, traveler_id, intent, params):
                 f"当地出发 {_local_time(row['departure_at'], _airport(db, row['departure_airport'])[1])}，"
                 f"参考报价 {amount_zh(row['demo_fare_amount'])}）" for row in rows),
                     "references": references,
-                    "earliest_id": rows[0]["id"] if ties == 1 else None}
+                    "earliest_id": rows[0]["id"] if ties == 1 else None,
+                    "flight_details": [_arrival_detail(db, row) for row in rows]}
         today = demo_date(db)
         if not today + timedelta(days=1) <= travel_date <= today + timedelta(days=30):
             return _result(f"当前可查的出发日期为 {today + timedelta(days=1)} 至 {today + timedelta(days=30)}；"
@@ -315,21 +348,49 @@ def read_for_assistant(db, traveler_id, intent, params):
             [{"type": "flight", "id": row["id"], "offer_version": row["offer_version"],
               "price": row["demo_fare_amount"], "travel_date": travel_date.isoformat()}
              for row in rows],
-        )
+        ) | {"flight_details": [_arrival_detail(db, row) for row in rows]}
 
     if intent == "hotel_search":
         if params.get("date_conflict"):
             return _result("入住日期、退房日期与所说的住宿夜数不一致，请确认要住几晚或明确退房日期。")
         airport = _as_text(params.get("airport"), 8)
         city = _city(_as_text(params.get("city")))
+        landing_id = params.get("_landing_flight_id")
+        landing_day = None
+        if landing_id is not None:
+            if type(landing_id) is not int:
+                return _result("无法核对落地航班；请重新选择班次。")
+            flight = db.execute(select(flights.c.arrival_airport, flights.c.arrival_at,
+                                       flights.c.status).join(
+                flight_offers, flight_offers.c.flight_id == flights.c.id).where(
+                flights.c.id == landing_id)).one_or_none()
+            if not flight or flight.status != "Scheduled" or flight.arrival_at.replace(
+                    tzinfo=flight.arrival_at.tzinfo or timezone.utc) <= datetime.now(timezone.utc):
+                return _result("这班航班已不可作为落地酒店依据；请重新查询并选择可售班次。")
+            airport = flight.arrival_airport
+            _, zone, city = _airport(db, airport)
+            if not zone:
+                return _result("无法核对落地机场；请重新选择航班。")
+            landing_day = flight.arrival_at.replace(
+                tzinfo=flight.arrival_at.tzinfo or timezone.utc
+            ).astimezone(ZoneInfo(zone)).date()
         if not city and airport:
             city = _airport(db, airport.upper())[2] or None
         check_in = _as_date(params.get("check_in"))
         check_out = _as_date(params.get("check_out"))
+        if landing_day and not check_in:
+            return _result(f"已核对航班落地 {_airport(db, airport)[0]}，当地到达日是 {landing_day}。"
+                           "可考虑到达日入住；请确认入住日期和住宿晚数或退房日期，"
+                           "我再查询机场周边酒店房型。")
+        if landing_day and check_in < landing_day:
+            return _result(f"所说入住日早于航班在 {_airport(db, airport)[0]} 的当地到达日"
+                           f" {landing_day}；请核对入住日期。")
         missing = [label for label, value in (("城市", city), ("入住日期", check_in),
                                               ("退房日期", check_out)) if not value]
         if missing:
-            known = f"已记下 {city_zh(city)}。" if city else ""
+            known = (f"已记下 {_airport(db, airport)[0]} 周边、{check_in} 入住。"
+                     if landing_day and check_in else
+                     f"已记下 {city_zh(city)}。" if city else "")
             missing_text = "和".join(missing) if len(missing) == 2 else "、".join(missing)
             return _result(known + "还需要" + missing_text + "，才能查询酒店。")
         if check_out <= check_in:
@@ -359,10 +420,19 @@ def read_for_assistant(db, traveler_id, intent, params):
                 f"按{city_zh(city)} {check_in} 入住、{check_out} 退房的全部有效房型比较，"
                 f"{'最高' if rank == 'max' else '最低'}总价房型是：" if rank else
                 f"找到以下酒店房型（{(check_out - check_in).days} 晚）：")
+        if landing_day:
+            lead = (f"{_airport(db, airport)[0]}周边，{check_in} 入住、"
+                    f"{check_out} 退房，" + lead)
         if len(tied) > 10:
             lead += "仅展示前 10 个并列房型；请指定机场缩小范围。"
         return {**_result(
             lead + "；".join(
+                f"{product_zh(row['name'], city=row['city'])} {room_zh(row['room_type'])}"
+                f"（产品 {row['product_id']}，每晚 {amount_zh(row['nightly_price'])}，"
+                f"{(check_out - check_in).days} 晚合计 "
+                f"{amount_zh(row['nightly_price'] * (check_out - check_in).days)}"
+                f"，距机场约 {row['distance_km']:.1f} 公里直线距离，非道路距离或通行时间）"
+                if airport and row.get("distance_km") is not None else
                 f"{product_zh(row['name'], city=row['city'])} {room_zh(row['room_type'])}"
                 f"（产品 {row['product_id']}，每晚 {amount_zh(row['nightly_price'])}，"
                 f"{(check_out - check_in).days} 晚合计 "

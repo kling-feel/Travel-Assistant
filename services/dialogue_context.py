@@ -83,6 +83,15 @@ def mentioned_cities(text: str) -> list[str]:
     return result
 
 
+def declared_current_city(text: str) -> str | None:
+    """A location claim must be made by the traveler, not inferred from a route."""
+    match = re.search(r"我(?:人)?(?:现在|目前)?(?:就)?在|我住在", text)
+    if not match:
+        return None
+    places = mentioned_cities(text[match.end():match.end() + 35])
+    return places[0] if places else None
+
+
 def mentioned_dates(text: str, base: date) -> list[date]:
     found = []
     for match in _ABSOLUTE.finditer(text):

@@ -306,7 +306,7 @@ def conversation_turn(session_id: str, data: TurnRequest,
             result = graph.invoke(
                 {"history": history, "demo_date": today, "answer": "",
                  "references": [], "transaction_plan": []},
-                {"configurable": {"thread_id": session_id}, "recursion_limit": 4},
+                {"configurable": {"thread_id": session_id}, "recursion_limit": 5},
             )
         answer = result.get("answer", "")
         references = result.get("references", [])

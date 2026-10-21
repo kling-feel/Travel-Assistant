@@ -2,13 +2,18 @@
 
 import json
 import re
+from datetime import date, timedelta
 from typing import TypedDict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from services.dialogue_boundaries import boundary_intent
-from services.dialogue_context import local_today, mentioned_cities, read_request, requested_actions
+from services.dialogue_context import (declared_current_city, local_today,
+                                       mentioned_cities, mentioned_dates,
+                                       read_request, requested_actions,
+                                       stay_nights)
+from services.location_labels import city_zh
 from config import settings
 
 
@@ -58,6 +63,8 @@ class TurnState(TypedDict, total=False):
     context: dict
     candidates: dict
     task_contexts: dict
+    location_context: dict
+    nearby_city: str
 
 
 def _safe_general(draft):
@@ -68,7 +75,7 @@ def _safe_general(draft):
 
 
 def _scoped_candidates(intent, references, params, *, earliest_id=None,
-                       extreme_id=None):
+                       extreme_id=None, flight_details=()):
     """Keep task scope in the checkpoint without changing public citations."""
     rows = []
     for item in references:
@@ -78,14 +85,15 @@ def _scoped_candidates(intent, references, params, *, earliest_id=None,
         if extreme_id is not None and item.get("id") == extreme_id:
             scoped["extreme_unique"] = True
         if intent == "flight_search" and item.get("type") == "flight":
+            detail = next((row for row in flight_details if row.get("id") == item.get("id")), {})
+            scoped.update({key: value for key, value in detail.items() if key != "id"})
             if earliest_id is not None and item.get("id") == earliest_id:
                 scoped["earliest_unique"] = True
             scoped["departure"] = (mentioned_cities(str(params.get("departure") or "")) or
                                    [params.get("departure")])[0]
             scoped["arrival"] = (mentioned_cities(str(params.get("arrival") or "")) or
                                  [params.get("arrival")])[0]
-            scoped["arrival_airport"] = (params.get("arrival") if
-                                          len(str(params.get("arrival") or "")) == 3 else None)
+            scoped["arrival_airport"] = scoped.get("arrival_airport")
         elif intent == "hotel_search" and item.get("type") == "hotel_product":
             scoped["city"] = params.get("city")
         elif intent == "rental_search" and item.get("type") == "rental_product":
@@ -95,16 +103,112 @@ def _scoped_candidates(intent, references, params, *, earliest_id=None,
     return rows
 
 
+def _chosen_landing(candidates, text):
+    flights = [item for item in candidates if isinstance(item, dict)
+               and item.get("type") == "flight" and item.get("arrival_airport")]
+    match = re.search(r"SIM-(\d+)", text, re.I)
+    if match:
+        return next((item for item in flights if str(item.get("id")) == match.group(1)), None)
+    match = re.search(r"第\s*([一二三123])\s*(?:个|班|趟)?", text)
+    order = {"一": 0, "二": 1, "三": 2, "1": 0, "2": 1, "3": 2}
+    if match and order[match.group(1)] < len(flights):
+        return flights[order[match.group(1)]]
+    if match:
+        return None
+    if len(flights) == 1:
+        return flights[0]
+    return None
+
+
 def build_graph(model, read_evidence, checkpointer):
+    def locate(state: TurnState):
+        text = state["history"][-1]["content"]
+        location = dict(state.get("location_context") or {})
+        claimed = declared_current_city(text)
+        if claimed:
+            location["current_city"] = claimed
+        return {"location_context": location}
+
     def route(state: TurnState):
         history = state["history"][-10:]
         user_text = history[-1]["content"]
         previous = history[-2]["content"] if len(history) > 1 else ""
         prior_context = state.get("context", {})
+        location = state.get("location_context") or {}
         base = local_today()
         writes = requested_actions(user_text)
         direct_intent, direct_params, direct_context = read_request(
             user_text, "general", {}, prior_context, base)
+        landing = bool(re.search(r"落地|到达后|目的地", user_text))
+        nearby = "附近" in user_text or "周边" in user_text or landing
+        lodging = bool(re.search(r"酒店|住宿|住哪|订房", user_text))
+        sight = bool(re.search(r"景点|经典地点|游览|好玩的地方", user_text))
+        if nearby and (lodging or sight) and not writes:
+            explicit = mentioned_cities(user_text)
+            current, destination = location.get("current_city"), location.get("destination_city")
+            if landing:
+                flight_candidates = (state.get("candidates") or {}).get("flight", [])
+                if not flight_candidates:
+                    flight_candidates = read_evidence("landing_context", {})["references"]
+                selected = _chosen_landing(flight_candidates, user_text)
+                if not selected:
+                    return {"intent": "general", "params": {}, "draft":
+                            "请先从已查到的航班中明确选择班次，我才能核对落地机场和当地到达日。"}
+                if lodging:
+                    hotel = {"intent": "hotel_search", "city": selected["arrival_city"],
+                             "airport": selected["arrival_airport"],
+                             "_landing_flight_id": selected["id"],
+                             "suggested_check_in": selected["arrival_date"],
+                             "sort": "distance"}
+                    tasks = dict(state.get("task_contexts") or {})
+                    tasks["hotel_search"] = hotel
+                    return {"intent": "hotel_search", "params": hotel, "context": hotel,
+                            "task_contexts": tasks, "draft": ""}
+                city = selected["arrival_city"]
+            elif explicit:
+                city = explicit[-1]
+            elif current and destination and current != destination:
+                return {"intent": "general", "params": {}, "draft":
+                        f"你是想了解现在所在的 {city_zh(current)}，"
+                        f"还是航班目的地 {city_zh(destination)}？请选一处。"}
+            else:
+                city = current
+            if not city:
+                return {"intent": "general", "params": {}, "draft":
+                        "请告诉我你现在所在的城市，或说明要查哪座目的地城市。"}
+            if sight:
+                return {"intent": "recommendation", "params": {},
+                        "nearby_city": city, "draft": ""}
+            hotel = {"intent": "hotel_search", "city": city}
+            for key in ("check_in", "check_out", "nights"):
+                if key in direct_params:
+                    hotel[key] = direct_params[key]
+            tasks = dict(state.get("task_contexts") or {})
+            tasks["hotel_search"] = hotel
+            return {"intent": "hotel_search", "params": hotel,
+                    "context": hotel, "task_contexts": tasks, "draft": ""}
+        hotel_task = (state.get("task_contexts") or {}).get("hotel_search") or {}
+        if (hotel_task.get("_landing_flight_id") and
+                re.search(r"(?:到达|落地)(?:当|那)天.{0,6}(?:入住|住)|"
+                          r"(?:入住|住).{0,6}(?:到达|落地)(?:当|那)天", user_text)
+                and not writes):
+            latest_flights = (state.get("candidates") or {}).get("flight", [])
+            if latest_flights and not any(
+                    item.get("id") == hotel_task["_landing_flight_id"]
+                    for item in latest_flights):
+                return {"intent": "general", "params": {}, "draft":
+                        "刚查询的航班已变化；请重新选择班次，再确认落地酒店日期。"}
+            hotel = dict(hotel_task)
+            hotel["check_in"] = hotel["suggested_check_in"]
+            nights = stay_nights(user_text, mentioned_dates(user_text, base))
+            if nights:
+                hotel["nights"] = nights
+                hotel["check_out"] = (date.fromisoformat(hotel["check_in"]) +
+                                      timedelta(days=nights)).isoformat()
+            tasks = dict(state.get("task_contexts") or {})
+            tasks["hotel_search"] = hotel
+            return {"intent": "hotel_search", "params": hotel, "context": hotel,
+                    "task_contexts": tasks, "draft": ""}
         if direct_intent == "flight_search" and direct_params.get("sort") == "earliest":
             tasks = dict(state.get("task_contexts") or {})
             tasks["flight_search"] = direct_context
@@ -142,9 +246,12 @@ def build_graph(model, read_evidence, checkpointer):
         if not writes and direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
             return {"intent": direct_intent, "params": direct_params,
                     "context": direct_context, "draft": ""}
-        if (re.search(r"(?:现在|还有).{0,12}(?:行程|机票|航班|出发)|"
-                      r"(?:行程|机票|航班).{0,12}(?:还有|要出发)", user_text)
+        if (re.search(r"(?:现在|还有|最近|近期|接下来|未来).{0,12}(?:行程|安排|机票|航班|出发)|"
+                      r"(?:行程|机票|航班).{0,12}(?:还有|要出发|安排)", user_text)
                 and not writes):
+            return {"intent": "itinerary", "params": {},
+                    "context": prior_context, "draft": ""}
+        if re.search(r"所有订单|历史订单|订单历史|行程历史", user_text) and not writes:
             return {"intent": "itinerary", "params": {},
                     "context": prior_context, "draft": ""}
         if re.search(r"什么模型|模型内核|底层模型|使用.{0,5}模型", user_text):
@@ -274,7 +381,30 @@ def build_graph(model, read_evidence, checkpointer):
                 groups[intent.split("_")[0]] = _scoped_candidates(
                     intent, result.get("references", []), params,
                     earliest_id=result.get("earliest_id"),
-                    extreme_id=result.get("extreme_unique_id"))
+                    extreme_id=result.get("extreme_unique_id"),
+                    flight_details=result.get("flight_details", ()))
+                if intent == "flight_search":
+                    location = dict(state.get("location_context") or {})
+                    tasks = dict(state.get("task_contexts") or {})
+                    if (tasks.get("hotel_search") or {}).get("_landing_flight_id"):
+                        tasks.pop("hotel_search", None)
+                    selected = _chosen_landing(groups["flight"], "")
+                    if selected:
+                        location.update(destination_city=selected.get("arrival_city"),
+                                        arrival_airport=selected.get("arrival_airport"),
+                                        arrival_date=selected.get("arrival_date"))
+                    elif groups["flight"]:
+                        destinations = {item.get("arrival_city") for item in groups["flight"]}
+                        location["destination_city"] = (destinations.pop()
+                                                        if len(destinations) == 1 else None)
+                        location.pop("arrival_airport", None)
+                        location.pop("arrival_date", None)
+                    else:
+                        for key in ("destination_city", "arrival_airport", "arrival_date"):
+                            location.pop(key, None)
+                    return {**result, "candidates": groups,
+                            "location_context": location,
+                            "task_contexts": tasks}
                 return {**result, "candidates": groups}
             return result
         return node
@@ -289,13 +419,27 @@ def build_graph(model, read_evidence, checkpointer):
             queries = []
         answers, references = [], []
         groups = dict(state.get("candidates") or {})
+        tasks = dict(state.get("task_contexts") or {})
         for query in queries[:2]:
             if not isinstance(query, dict) or query.get("intent") not in (
                     "itinerary", "flight_search", "hotel_search", "rental_search"):
                 continue
             query_params = query.get("params")
             query_params = dict(query_params) if isinstance(query_params, dict) else {}
-            if query["intent"] == "hotel_search" and not query_params.get("city"):
+            query_params.pop("_landing_flight_id", None)
+            query_params.pop("suggested_check_in", None)
+            if (query["intent"] == "hotel_search" and
+                    re.search(r"落地|到达后", state["history"][-1]["content"])):
+                selected = _chosen_landing(groups.get("flight", []),
+                                           state["history"][-1]["content"])
+                if not selected:
+                    answers.append("请先明确要乘坐的航班，我才能核对落地机场及当地到达日，再找周边酒店。")
+                    continue
+                query_params = {"city": selected["arrival_city"],
+                                "airport": selected["arrival_airport"],
+                                "_landing_flight_id": selected["id"],
+                                "sort": "distance"}
+            elif query["intent"] == "hotel_search" and not query_params.get("city"):
                 flights = groups.get("flight", [])
                 proposed = next((item.get("parameters", {}).get("flight_id") for item in plans
                                  if isinstance(item, dict) and item.get("action_type") == "flight_book"), None)
@@ -312,7 +456,11 @@ def build_graph(model, read_evidence, checkpointer):
             groups[query["intent"].split("_")[0]] = _scoped_candidates(
                 query["intent"], result["references"], query_params,
                 earliest_id=result.get("earliest_id"),
-                extreme_id=result.get("extreme_unique_id"))
+                extreme_id=result.get("extreme_unique_id"),
+                flight_details=result.get("flight_details", ()))
+            if query["intent"] == "hotel_search" and query_params.get("_landing_flight_id"):
+                tasks["hotel_search"] = {"intent": "hotel_search", **query_params,
+                                          "suggested_check_in": selected["arrival_date"]}
             if (query["intent"] == "flight_search" and query_params.get("sort") == "earliest"
                     and any(isinstance(item, dict) and item.get("action_type") == "flight_book"
                             for item in plans) and result.get("earliest_id") is None):
@@ -330,12 +478,16 @@ def build_graph(model, read_evidence, checkpointer):
             answers.append("本轮最多处理两笔；其余需求请在下一轮提出。")
         return {"answer": "\n".join(answers), "references": references[:15],
                 "candidates": groups,
-                "transaction_plan": plans[:2]}
+                "transaction_plan": plans[:2],
+                "task_contexts": tasks}
 
     def recommendation(state: TurnState):
-        params = state.get("params", {})
-        return read_evidence("recommendation", {**params,
-                "user_text": state["history"][-1]["content"]})
+        params = dict(state.get("params", {}))
+        params.pop("_resolved_city", None)
+        text = state["history"][-1]["content"]
+        if ("附近" in text or "周边" in text) and state.get("nearby_city"):
+            params["_resolved_city"] = state["nearby_city"]
+        return read_evidence("recommendation", {**params, "user_text": text})
 
     def multi_read(state: TurnState):
         params = state.get("params", {})
@@ -345,11 +497,13 @@ def build_graph(model, read_evidence, checkpointer):
                 "references": (flight["references"] + hotel["references"])[:15],
                 "candidates": {**(state.get("candidates") or {}),
                                "flight": _scoped_candidates("flight_search", flight["references"],
-                                                            params.get("flight", {})),
+                                                            params.get("flight", {}),
+                                                            flight_details=flight.get("flight_details", ())),
                                "hotel": _scoped_candidates("hotel_search", hotel["references"],
                                                            params.get("hotel", {}))}}
 
     builder = StateGraph(TurnState)
+    builder.add_node("locate", locate)
     builder.add_node("route", route)
     builder.add_node("general", general)
     builder.add_node("transaction", transaction)
@@ -359,7 +513,8 @@ def build_graph(model, read_evidence, checkpointer):
     for intent in ("itinerary", "policy", "flight_search", "hotel_search", "rental_search",
                    "weather", "capabilities", "hotel_coverage"):
         builder.add_node(intent, lookup(intent))
-    builder.add_edge(START, "route")
+    builder.add_edge(START, "locate")
+    builder.add_edge("locate", "route")
     builder.add_conditional_edges("route", lambda state: state["intent"],
                                   {intent: intent for intent in INTENTS})
     for intent in INTENTS:

@@ -560,7 +560,9 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
             (country_for_reachable_city(db, explicit) or {}).get("code")
             != requested_country[1]):
         return result("你提到的城市与国家或地区不一致，请明确本轮目的地。")
-    city = explicit
+    resolved = params.get("_resolved_city")
+    resolved = resolved if isinstance(resolved, str) and resolved in cities else None
+    city = explicit or resolved
     candidate_mentioned = bool(candidate and _mentioned(user_text, candidate))
     if city is None and candidate_mentioned and candidate.isascii():
         alternatives = "、".join(city_zh(name) for name in (owned[:3] or cities[:3]))
@@ -637,6 +639,9 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
         prefix = "固定证据测试输出，地点和链接仅用于验收，不能作为实时旅行资料。" + prefix
     if city in owned:
         prefix = f"结合你已确认的 {city_zh(city)} 行程，" + prefix
+    if ("附近" in user_text or "周边" in user_text) and resolved:
+        prefix = (f"按你指定的 {city_zh(city)}，以下是城市级地点建议；"
+                  "当前没有你的位置或景点坐标，不能核实距离。" + prefix)
     if "酒店" in user_text and re.search(r"附近|距离|多远|几公里|公里|步行|车程", user_text):
         prefix += "目前缺少已核实的地点坐标，无法判断这些地点与酒店的距离。"
     if re.search(r"门票|票价|价格|多少钱|费用", user_text):

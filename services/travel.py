@@ -24,7 +24,8 @@ class OrderError(ValueError):
 
 def itinerary(session, traveler_id):
     flight_rows = session.execute(
-        select(flight_orders.c.id, flight_orders.c.status, flight_orders.c.version,
+        select(flight_orders.c.id, flight_orders.c.flight_id, flight_orders.c.status,
+               flight_orders.c.version,
                flight_orders.c.amount, flights.c.flight_no, flights.c.departure_at,
                flights.c.arrival_at, flights.c.departure_airport,
                flights.c.arrival_airport)
