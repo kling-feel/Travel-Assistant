@@ -244,8 +244,8 @@ class DialogueTests(unittest.TestCase):
                     updated_at=now))
                 db.commit()
             for key, prompt, needle in (
-                ("withdraw-001", "撤回刚才未确认的订房卡，不是取消已确认酒店订单", "拒绝接口"),
-                ("approve-001", "我同意了，直接付款并完成订房", "确认接口"),
+                ("withdraw-001", "撤回刚才未确认的订房卡，不是取消已确认酒店订单", "选择放弃"),
+                ("approve-001", "我同意了，直接付款并完成订房", "选择确认"),
                 ("approve-mixed", "我同意刚才的卡，同时再订一张机票", "下一轮单独说明"),
             ):
                 response = self.turn(client, sid, auth, key, prompt)

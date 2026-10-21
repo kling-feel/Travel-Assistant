@@ -112,11 +112,11 @@ def read_action_guidance(db, traveler_id, session_id, mode):
         f"{amount_zh(card['price'].get('refundable', 0))}）" for card in current)
     pending = [card for card in current if card["status"] == "pending"]
     if mode == "withdraw":
-        advice = ("如要撤回，请对每张仍待确认的卡分别调用对应的拒绝接口；"
+        advice = ("如要撤回，请在每张仍待确认的卡上分别选择放弃；"
                   "这条对话不会取消已确认订单，也不会自动拒绝卡。"
                   if pending else "这些卡目前已非待确认状态，无需再次拒绝。")
     else:
-        advice = ("如确认，请先核对每张卡的对象、时间、金额和政策，再分别调用对应的确认接口；"
+        advice = ("如要继续，请先核对每张卡的对象、时间、金额和政策，再分别选择确认；"
                   "口头同意或付款表达不会执行订单，也不会重复生成卡。"
                   "如还想办理新的交易，请下一轮单独说明对象和条件。"
                   if pending else "这些卡目前已非待确认状态，请重新查询后再提出新交易。")

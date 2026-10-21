@@ -354,10 +354,10 @@ def conversation_turn(session_id: str, data: TurnRequest,
                                     f"已生成 {len(actions)} 张待确认卡。")
                 answer = (overview + "\n" if overview else "") + (
                           card_notice +
-                          "请逐张核对对象、时间、金额和政策，并通过对应动作接口确认或拒绝；"
-                          "目前订单尚未改变。")
+                          "请在下方逐张核对对象、时间、金额和政策，再选择确认或放弃。"
+                          "你确认前，订单不会改变。")
                 if read_answer:
-                    answer += "\n查询结果：" + read_answer
+                    answer += "\n同时查到：" + read_answer
             except (SelectionNeeded, ActionError) as error:
                 logger.info("dialogue_proposal_rejected reason=%s", type(error).__name__)
                 session.rollback()  # any partial card and audit are discarded
@@ -374,6 +374,15 @@ def conversation_turn(session_id: str, data: TurnRequest,
                     answer = (answer + "\n查询结果：" + result.get("answer", ""))[:4000]
         if len(references) > 15:
             references = references[:15]
+        composer = getattr(model, "compose", None)
+        if (not plans and not actions and not mass_cancel and callable(composer)):
+            try:
+                composed = composer(result.get("intent"), content, answer, references)
+                if isinstance(composed, str) and 1 <= len(composed) <= 4000:
+                    answer = composed
+            except Exception as error:
+                logger.warning("dialogue_presentation_fallback reason=%s",
+                               type(error).__name__)
         outcome = finish_turn(session, traveler["id"], session_id, turn["id"],
                               answer, references, actions)
         session.commit()

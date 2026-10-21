@@ -3,6 +3,7 @@
 from langchain_openai import ChatOpenAI
 
 from config import settings
+from services.answer_composer import ComposingModel
 
 
 class ModelUnavailable(RuntimeError):
@@ -17,7 +18,7 @@ def get_chat_model():
         raise ModelUnavailable("AI_MODEL and AI_BASE_URL are not configured")
     if provider != "local" and not settings.AI_API_KEY:
         raise ModelUnavailable("AI_API_KEY is not configured")
-    return ChatOpenAI(
+    return ComposingModel(ChatOpenAI(
         model=settings.AI_MODEL,
         base_url=settings.AI_BASE_URL,
         api_key=settings.AI_API_KEY or "local-no-key",
@@ -25,4 +26,4 @@ def get_chat_model():
         timeout=25,
         max_retries=0,
         max_tokens=4096,
-    )
+    ))
