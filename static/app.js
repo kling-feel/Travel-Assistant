@@ -207,7 +207,9 @@ function showReferences(references) {
     order: "本人订单", policy: "虚构规则", place_source: "地点来源", action: "待确认卡" };
   for (const ref of references) {
     const id = ref.type === "action" && ref.id ? String(ref.id).slice(0, 8) : ref.id;
-    const parts = [labels[ref.type] || ref.type, ref.place, ref.city ? cityName(ref.city) : null,
+    const place = ref.display_name && ref.place && ref.display_name !== ref.place
+      ? `${ref.display_name}（${ref.place}）` : (ref.display_name || ref.place);
+    const parts = [labels[ref.type] || ref.type, place, ref.city ? cityName(ref.city) : null,
       id, ref.version ? `v${ref.version}` : null]
       .filter((part) => part !== null && part !== undefined && part !== "");
     appendText(box, "span", "", parts.join(" · "));

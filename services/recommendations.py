@@ -16,7 +16,7 @@ from db.travel_models import (airports, demo_state, flight_offers, flight_orders
 from services.recommendation_geography import (airport_geography,
                                                country_for_fixture_city,
                                                country_for_reachable_city)
-from services.reviewed_places import places_for_city
+from services.reviewed_places import places_for_city, reviewed_places
 from services.location_labels import CITY_ALIASES as _CITY_ALIASES, city_zh
 
 logger = logging.getLogger(__name__)
@@ -231,7 +231,8 @@ class ReviewedCatalogProvider:
             try:
                 candidates = self._live.search(city, preference, country)
                 names = {name.casefold() for place in places
-                         for name in (place["name"], *place["aliases"])}
+                         for name in (place["name"], place["display_name_zh"],
+                                      *place["aliases"])}
                 self.live_status = ("matched" if any(
                     isinstance(item, dict) and
                     isinstance(item.get("place"), str) and
@@ -544,6 +545,18 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
                       "具体出发日期的航班仍需单独查询。")
     # A city proposed by the model is only accepted when the traveler typed it.
     explicit = _explicit_city(user_text, cities)
+    place_cities = set()
+    if explicit is None:
+        try:
+            place_cities = {place["city"] for place in reviewed_places()
+                            if place["city"] in cities and any(
+                                len(name) >= 2 and _mentioned(user_text, name)
+                                for name in (place["display_name_zh"], place["name"],
+                                             *place["aliases"]))}
+        except (OSError, ValueError):
+            return result("地点目录校验异常，暂无法核实该地点的城市。")
+        if len(place_cities) > 1:
+            return result("你提到了不同城市的地点，请明确本轮要了解哪座城市。")
     requested_country = next(((name, code) for name, code in _COUNTRY_REQUESTS.items()
                               if name in user_text), None)
     if requested_country and explicit is None:
@@ -562,7 +575,7 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
         return result("你提到的城市与国家或地区不一致，请明确本轮目的地。")
     resolved = params.get("_resolved_city")
     resolved = resolved if isinstance(resolved, str) and resolved in cities else None
-    city = explicit or resolved
+    city = explicit or next(iter(place_cities), None) or resolved
     candidate_mentioned = bool(candidate and _mentioned(user_text, candidate))
     if city is None and candidate_mentioned and candidate.isascii():
         alternatives = "、".join(city_zh(name) for name in (owned[:3] or cities[:3]))
@@ -656,12 +669,17 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
         label = _CATEGORIES[item["category"]]
         reason = f"符合你提出的{label}偏好" if item["category"] == preference else f"可了解当地{label}主题"
         if catalog:
-            lines.append(f"{index}. {item['place']}：{item['intro']}（{reason}）")
+            display = item["display_name_zh"]
+            label_name = (display if display == item["place"] else
+                          f"{display}（{item['place']}）")
+            lines.append(f"{index}. {label_name}：{item['intro']}（{reason}）")
             refs.append({"type": "place_source", "id": item["id"],
                          "city": city, "country_code": country["code"],
                          "place": item["place"], "title": item["title"],
+                         "display_name": display,
                          "url": item["url"], "source_class": item["source_class"],
-                         "reviewed_on": item["reviewed_on"]})
+                         "reviewed_on": item["reviewed_on"],
+                         "display_reviewed_on": item["display_reviewed_on"]})
             continue
         title = item["title"].replace("[", "\\[").replace("]", "\\]")
         lines.append(f"{index}. {item['place']}：{reason}。来源：[{title}]({item['url']})；检索于 {item['retrieved_at']}。")

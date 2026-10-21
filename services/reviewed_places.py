@@ -15,10 +15,17 @@ from services.recommendation_geography import country_for_fixture_city
 _ROOT = Path(__file__).resolve().parent.parent / "data/fixtures"
 _SOURCE = _ROOT / "reviewed_places_v2.psv"
 _PREVIOUS_SOURCE = _ROOT / "reviewed_places_v1.psv"
+_DISPLAY_SOURCE = _ROOT / "reviewed_place_display_v1.psv"
 _NETWORK = _ROOT / "network_source.sqlite"
 _FIELDS = ("id", "city", "country_code", "name", "aliases", "category",
            "intro", "url", "source_class", "reviewed_on")
+_DISPLAY_FIELDS = ("id", "display_name_zh", "display_category",
+                   "name_evidence_url", "name_evidence_kind", "reviewed_on",
+                   "review_note", "display_intro_zh")
 _CATEGORIES = {"history", "culture", "nature", "architecture", "family", "food"}
+_NAME_EVIDENCE_KINDS = {"reviewed_alias", "cn_encyclopedia",
+                        "institution_cn", "bilingual_secondary",
+                        "city_secondary", "editorial_translation"}
 _SOURCE_CLASSES = {"venue_official", "city_institution", "encyclopedia"}
 _SOURCE_HOSTS = {
     "venue_official": {"colosseo.it", "www.staedelmuseum.de",
@@ -71,6 +78,43 @@ def _safe_url(value: str) -> bool:
         return False
     except ValueError:
         return bool(host and "." in host and re.fullmatch(r"[A-Za-z0-9.-]+", host))
+
+
+def _display_rows(expected_ids: set[str]) -> dict[str, dict]:
+    with _DISPLAY_SOURCE.open(encoding="utf-8", newline="") as source:
+        reader = csv.DictReader(source, delimiter="|")
+        if tuple(reader.fieldnames or ()) != _DISPLAY_FIELDS:
+            raise ValueError("invalid reviewed-place display header")
+        rows = list(reader)
+    displays: dict[str, dict] = {}
+    for row in rows:
+        if None in row or any(not isinstance(row[field], str)
+                              for field in _DISPLAY_FIELDS):
+            raise ValueError("invalid reviewed-place display row")
+        place_id = row["id"]
+        name = row["display_name_zh"].strip()
+        intro = row["display_intro_zh"].strip()
+        try:
+            reviewed_on = date.fromisoformat(row["reviewed_on"])
+        except ValueError as exc:
+            raise ValueError("invalid reviewed-place display date") from exc
+        if (place_id in displays or place_id not in expected_ids
+                or not 2 <= len(name) <= 80
+                or not re.search(r"[\u4e00-\u9fff]", name)
+                or _UNSAFE.search(name)
+                or row["display_category"] not in _CATEGORIES
+                or row["name_evidence_kind"] not in _NAME_EVIDENCE_KINDS
+                or not _safe_url(row["name_evidence_url"])
+                or reviewed_on > date.today()
+                or not 4 <= len(row["review_note"]) <= 160
+                or _UNSAFE.search(row["review_note"])
+                or (intro and (not 8 <= len(intro) <= 160
+                               or _UNSAFE.search(intro)))):
+            raise ValueError(f"invalid reviewed-place display: {place_id}")
+        displays[place_id] = row
+    if set(displays) != expected_ids:
+        raise ValueError("incomplete reviewed-place display")
+    return displays
 
 
 @lru_cache(maxsize=1)
@@ -129,6 +173,22 @@ def reviewed_places() -> tuple[dict, ...]:
         raise ValueError("incomplete reviewed-place catalog")
     if any(count != 2 for count in Counter(place["city"] for place in places).values()):
         raise ValueError("reviewed-place city coverage is uneven")
+    displays = _display_rows(ids)
+    display_names = set()
+    for place in places:
+        display = displays[place["id"]]
+        key = (place["city"], display["display_name_zh"].casefold())
+        if key in display_names:
+            raise ValueError(f"duplicate reviewed-place display: {place['id']}")
+        display_names.add(key)
+        place.update(display_name_zh=display["display_name_zh"],
+                     original_category=place["category"],
+                     category=display["display_category"],
+                     name_evidence_url=display["name_evidence_url"],
+                     name_evidence_kind=display["name_evidence_kind"],
+                     display_reviewed_on=display["reviewed_on"])
+        if display["display_intro_zh"]:
+            place["intro"] = display["display_intro_zh"]
     return tuple(places)
 
 
