@@ -100,8 +100,7 @@ function local(value) {
 }
 function localClock(value) {
   if (!value) return "—";
-  const stamp = String(value).match(/^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)/);
-  return stamp ? `${stamp[1]} ${stamp[2]}（当地）` : local(value);
+  return `${local(value)}（当地）`;
 }
 function displayStamp(value) {
   if (!value) return "—";
@@ -166,9 +165,14 @@ function compactSnapshot(value, kind) {
   if (!value) return "新建订单";
   if (kind.startsWith("flight_"))
     return `${airportName(value.departure_airport)} → ${airportName(value.arrival_airport)} · ${value.departure_local ? localClock(value.departure_local) : localAtAirport(value.departure_at, value.departure_airport)}`;
-  if (kind.startsWith("hotel_"))
-    return `${productName(value.hotel_name || "酒店")} · ${roomName(value.room_type || "房型")} · ${value.check_in || "—"} 至 ${value.check_out || "—"}`;
-  return `${productName(value.product_name || "车辆")} · ${localClock(value.pickup_local || value.pickup_at)} 至 ${localClock(value.dropoff_local || value.dropoff_at)}`;
+  if (kind.startsWith("hotel_")) {
+    const start = Date.parse(`${value.check_in}T00:00:00Z`);
+    const end = Date.parse(`${value.check_out}T00:00:00Z`);
+    const nights = Number.isFinite(start) && Number.isFinite(end) && end > start
+      ? ` · ${(end - start) / 86400000} 晚` : "";
+    return `${productName(value.hotel_name || "酒店")} · ${roomName(value.room_type || "房型")} · ${value.check_in || "—"} 至 ${value.check_out || "—"}${nights}`;
+  }
+  return `${productName(value.product_name || "车辆")} · ${localClock(value.pickup_local || value.pickup_at)} 至 ${localClock(value.dropoff_local || value.dropoff_at)}${value.billable_days ? ` · 计费 ${value.billable_days} 日` : ""}`;
 }
 function cardSummary(card) {
   const price = card.price || {};
@@ -180,6 +184,8 @@ function cardSummary(card) {
     ["调整前", compactSnapshot(card.before, card.action_type)],
     ["调整后", compactSnapshot(card.after, card.action_type)],
     ["原金额", money(price.old_amount)], ["新金额", money(price.new_amount)],
+    ...(card.action_type.startsWith("rental_") && card.after?.daily_price
+      ? [["每日单价", money(card.after.daily_price)]] : []),
     [payableLabel, money(price.payable)], ["可退金额", money(price.refundable)],
     ["取消费", money(price.cancellation_fee)],
     ["规则", card.policy ? `${card.policy.id} / v${card.policy.version}` : "—"],

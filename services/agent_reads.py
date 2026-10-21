@@ -318,6 +318,8 @@ def read_for_assistant(db, traveler_id, intent, params):
         )
 
     if intent == "hotel_search":
+        if params.get("date_conflict"):
+            return _result("入住日期、退房日期与所说的住宿夜数不一致，请确认要住几晚或明确退房日期。")
         airport = _as_text(params.get("airport"), 8)
         city = _city(_as_text(params.get("city")))
         if not city and airport:
@@ -330,11 +332,17 @@ def read_for_assistant(db, traveler_id, intent, params):
             known = f"已记下 {city_zh(city)}。" if city else ""
             missing_text = "和".join(missing) if len(missing) == 2 else "、".join(missing)
             return _result(known + "还需要" + missing_text + "，才能查询酒店。")
-        sort = "distance" if airport and params.get("sort") == "distance" else "price"
+        if check_out <= check_in:
+            return _result("退房日期必须晚于入住日期；请核对住宿夜数和日期。")
+        rank = params.get("rank") if params.get("rank") in ("max", "min") else None
+        sort = ("price_desc" if rank == "max" else
+                "distance" if airport and params.get("sort") == "distance" and not rank else "price")
         try:
             rows = find_hotels(db, city, check_in, check_out, airport=airport,
-                               sort=sort, limit=3)
-        except OrderError:
+                               sort=sort, limit=500 if rank else 3)
+        except OrderError as error:
+            if rank and "too many" in str(error):
+                return _result("符合条件的房型过多，无法可靠比较最高或最低价；请指定机场缩小范围。")
             return _result("酒店查询条件无效，请核对城市和日期。")
         if not rows:
             count = db.execute(select(hotels.c.id).join(
@@ -342,15 +350,28 @@ def read_for_assistant(db, traveler_id, intent, params):
                 hotels.c.city == city).limit(1)).first()
             reason = "该日期没有可用房型" if count else "当前模拟网络未提供该城市的酒店产品"
             return _result(f"已查询 {city_zh(city)} {check_in} 入住、{check_out} 退房：{reason}。")
-        return _result(
-            "找到以下酒店房型：" + "；".join(
+        tied = [row for row in rows if row["nightly_price"] == rows[0]["nightly_price"]] if rank else []
+        unique_id = rows[0]["product_id"] if rank and len(tied) == 1 else None
+        shown = rows[:min(max(3, len(tied)), 10)]
+        lead = (f"按{city_zh(city)} {check_in} 入住、{check_out} 退房的全部有效房型比较，"
+                f"{'最高' if rank == 'max' else '最低'}总价有 {len(tied)} 个并列，请指定房型："
+                if rank and len(tied) > 1 else
+                f"按{city_zh(city)} {check_in} 入住、{check_out} 退房的全部有效房型比较，"
+                f"{'最高' if rank == 'max' else '最低'}总价房型是：" if rank else
+                f"找到以下酒店房型（{(check_out - check_in).days} 晚）：")
+        if len(tied) > 10:
+            lead += "仅展示前 10 个并列房型；请指定机场缩小范围。"
+        return {**_result(
+            lead + "；".join(
                 f"{product_zh(row['name'], city=row['city'])} {room_zh(row['room_type'])}"
-                f"（产品 {row['product_id']}，每晚 {amount_zh(row['nightly_price'])}）" for row in rows),
+                f"（产品 {row['product_id']}，每晚 {amount_zh(row['nightly_price'])}，"
+                f"{(check_out - check_in).days} 晚合计 "
+                f"{amount_zh(row['nightly_price'] * (check_out - check_in).days)}）"
+                for row in shown),
             [{"type": "hotel_product", "id": row["product_id"],
               "price": row["nightly_price"], "distance_km": row.get("distance_km"),
               "check_in": check_in.isoformat(), "check_out": check_out.isoformat()}
-             for row in rows],
-        )
+             for row in shown]), "extreme_unique_id": unique_id}
 
     if intent == "rental_search":
         city = _city(_as_text(params.get("city")))
@@ -358,24 +379,58 @@ def read_for_assistant(db, traveler_id, intent, params):
         pickup = _as_date(params.get("pickup_date"))
         dropoff = _as_date(params.get("drop_off_date"))
         if (not city and not airport) or not pickup or not dropoff:
-            return _result("请提供取车地点，以及取车和还车日期，以便查询租车。")
+            missing = []
+            if not city and not airport:
+                missing.append("取车地点")
+            if not pickup:
+                missing.append("取车日期")
+            if not dropoff:
+                missing.append("还车日期")
+            hint = ("两天用车可按取车后连续 48 小时规划；请明确还车当地日期和时刻。"
+                    if params.get("duration_hours") == 48 else "")
+            return _result("还需要" + "、".join(missing) + "，才能查询租车。" + hint)
+        rank = params.get("rank") if params.get("rank") in ("max", "min") else None
         try:
             rows = find_rentals(db, pickup, dropoff, city=city,
                                 airport=airport.upper() if airport else None,
-                                sort="price", limit=3)
-        except OrderError:
+                                sort="price_desc" if rank == "max" else "price",
+                                limit=500 if rank else 3)
+        except OrderError as error:
+            if rank and "too many" in str(error):
+                return _result("符合条件的车辆过多，无法可靠比较最高或最低价；请指定机场缩小范围。")
             return _result("租车查询条件无效，请核对地点和日期。")
         if not rows:
             return _result("该地点和日期没有可用的车辆。")
-        return _result(
-            "找到以下车辆：" + "；".join(
+        tied = [row for row in rows if row["daily_price"] == rows[0]["daily_price"]] if rank else []
+        unique_id = rows[0]["id"] if rank and len(tied) == 1 else None
+        shown = rows[:min(max(3, len(tied)), 10)]
+        place_name = city_zh(city) if city else airport_zh(airport, "")
+        lead = (f"按{place_name} {pickup} 至 {dropoff} 的全部有效车辆比较，"
+                f"{'最高' if rank == 'max' else '最低'}每日价有 {len(tied)} 辆并列，请指定车辆："
+                if rank and len(tied) > 1 else
+                f"按{place_name} {pickup} 至 {dropoff} 的全部有效车辆比较，"
+                f"{'最高' if rank == 'max' else '最低'}每日价车辆是：" if rank else
+                "找到以下车辆：")
+        if len(tied) > 10:
+            lead += "仅展示前 10 辆并列车辆；请指定机场缩小范围。"
+        missing_clocks = [label for label, key in (("取车", "pickup_clock"),
+                                                    ("还车", "dropoff_clock"))
+                          if not params.get(key)]
+        next_step = ("请补充" + "和".join(missing_clocks) + "的当地时刻后再预订。"
+                     if missing_clocks else
+                     f"已记下当地取车 {params['pickup_clock']}、还车 {params['dropoff_clock']}；"
+                     "请核对车辆和时刻后提出预订。")
+        if params.get("duration_hours") == 48 and missing_clocks:
+            next_step = "两天用车按连续 48 小时作为建议；" + next_step
+        return {**_result(
+            lead + "；".join(
                 f"{product_zh(row['name'], city=row['city'], airport=row['airport_code'])}"
                 f"（产品 {row['id']}，每日 {amount_zh(row['daily_price'])}）"
-                for row in rows) + "。如需预订，请选择车辆并提供取车、还车的当地时刻。",
+                for row in shown) + "。" + next_step,
             [{"type": "rental_product", "id": row["id"],
               "price": row["daily_price"], "pickup_date": pickup.isoformat(),
-              "drop_off_date": dropoff.isoformat()} for row in rows],
-        )
+              "drop_off_date": dropoff.isoformat()} for row in shown]),
+                "extreme_unique_id": unique_id}
 
     if intent == "hotel_coverage":
         city = _city(_as_text(params.get("city")))

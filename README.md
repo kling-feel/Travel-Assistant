@@ -1,6 +1,6 @@
 # 旅行助手（企业项目改造中）
 
-这是一个使用虚构数据的旅行助手求职作品，保留 FastAPI 和 LangGraph 主助手／专门助手结构。**P0～P2.7e 已发布到 main；P3.1 旅客页面及 P3.1a/c/d 对话和展示改进仍在功能分支，待单独确认发布。**旅客可以在 `/app` 登录、进行多轮对话、查询本人行程和航班／酒店／租车、读取虚构平台政策，并为九类交易生成待确认卡；旅客须逐笔确认或拒绝，未确认不会修改订单。现有 95 座可达城市、每城 2 个经逐页核查的经典地点。配置阿里云密钥后，联网检索默认开启。游览预订不在最终范围。旧交易接口始终不注册。
+这是一个使用虚构数据的旅行助手求职作品，保留 FastAPI 和 LangGraph 主助手／专门助手结构。**P0～P2.7e 已发布到 main；P3.1 旅客页面及截至 P3.1e2b 的对话和展示改进仍在功能分支，待单独确认发布。**旅客可以在 `/app` 登录、进行多轮对话、查询本人行程和航班／酒店／租车、读取虚构平台政策，并为九类交易生成待确认卡；旅客须逐笔确认或拒绝，未确认不会修改订单。现有 95 座可达城市、每城 2 个经逐页核查的经典地点。配置阿里云密钥后，联网检索默认开启。游览预订不在最终范围。旧交易接口始终不注册。
 
 项目方案见 [产品需求](docs/enterprise/产品需求.md)、[软件架构](docs/enterprise/软件架构.md) 和 [当前进度](docs/enterprise/当前进度.md)。
 
@@ -99,7 +99,7 @@ P2.4c 的酒店和租车产品由 [生成规则](services/city_products.py) 根�
 
    浏览 `http://127.0.0.1:8000/health` 应得到 `{"status":"ok"}`，`/docs` 可打开接口文档。用 `.env` 中的 `DEMO_TRAVELER_1_PASSWORD` 和 `DEMO_TRAVELER_2_PASSWORD` 分别登录账号 `demo1`、`demo2`。可在本机 PowerShell 中查看密码：`Select-String -Path .env -Pattern '^DEMO_TRAVELER_[12]_PASSWORD='`；这些是本机演示密码，不要复制到公开仓库或直播画面。
 
-   在 `/docs` 中调用 `POST /api/v1/login`，请求体为 `{"username":"demo1","password":"从 .env 读取的密码"}`。复制响应中的 `access_token`，点页面右上方 **Authorize**，粘贴令牌。随后调用 `GET /api/v1/me`、`GET /api/v1/me/itinerary`；切换到 `demo2` 能看到另一名旅客的订单。航班、酒店、租车产品与规则查询分别为 `GET /api/v1/flights`、`/api/v1/hotels`、`/api/v1/rentals`、`/api/v1/policies/{scope}`。例如以 2026-10-18 为演示基准日，在次日查询 `GET /api/v1/hotels?city=Basel&check_in=2026-10-19&check_out=2026-10-20&airport=BSL&sort=distance&limit=3`，以及 `GET /api/v1/rentals?airport=BSL&pickup_date=2026-10-19&drop_off_date=2026-10-20`；若演示基准日不同，将日期同步改成数据库 `demo_state.as_of` 的次日。酒店支持 `limit`、`offset`、`sort=price|distance`，租车另支持 `city` 与 `max_daily_price`；距离排序须指定机场，超出演示日期窗返回空列表。旧用户管理和图交易接口已不注册。
+   在 `/docs` 中调用 `POST /api/v1/login`，请求体为 `{"username":"demo1","password":"从 .env 读取的密码"}`。复制响应中的 `access_token`，点页面右上方 **Authorize**，粘贴令牌。随后调用 `GET /api/v1/me`、`GET /api/v1/me/itinerary`；切换到 `demo2` 能看到另一名旅客的订单。航班、酒店、租车产品与规则查询分别为 `GET /api/v1/flights`、`/api/v1/hotels`、`/api/v1/rentals`、`/api/v1/policies/{scope}`。例如以 2026-10-18 为演示基准日，在次日查询 `GET /api/v1/hotels?city=Basel&check_in=2026-10-19&check_out=2026-10-20&airport=BSL&sort=distance&limit=3`，以及 `GET /api/v1/rentals?airport=BSL&pickup_date=2026-10-19&drop_off_date=2026-10-20`；若演示基准日不同，将日期同步改成数据库 `demo_state.as_of` 的次日。酒店与租车支持 `limit`、`offset`、`sort=price|price_desc|distance`，其中 `price_desc` 按有效产品单价从高到低；租车另支持 `city` 与 `max_daily_price`。距离排序须指定机场，超出演示日期窗返回空列表。对话中的“最贵／最便宜”会在完整地点和日期条件下比较全部有效产品；价格并列时请旅客指定产品。旧用户管理和图交易接口已不注册。
 
    会话接口：调用 `POST /api/v1/sessions`，请求体填 `{}`，从结果复制 `id`。模型配置完成后，调用 `POST /api/v1/sessions/{id}/turns`，请求体例如 `{"request_key":"demo-turn-001","content":"机票取消政策是什么？"}`；每个新问题换一个 `request_key`，网络重试同一问题沿用原值。响应的 `answer` 是助手答复，`references` 给出政策规则 ID/版本或候选 ID，`status=completed` 表示该轮已保存。继续用同一会话 ID 和新的请求键提问，就能多轮对话；`GET /api/v1/sessions/{id}` 按顺序读取双方消息，`GET /api/v1/sessions` 列出自己的会话。另一个演示账号访问该 `id` 会得到 404。`POST /messages` 仍可用于尚未开始图对话的旧式手工旅客消息；会话进入 `/turns` 后它返回 409，避免两套历史分叉。请求不能指定旅客 ID、图线程 ID 或伪造助手角色。
 

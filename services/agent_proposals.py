@@ -69,6 +69,11 @@ def _product_choice(kind, proposed, groups, text):
         if ordinal >= len(ids):
             raise SelectionNeeded("所选序号不在当前候选中，请重新选择。")
         choice = ids[ordinal]
+    elif kind in ("hotel", "rental") and re.search(r"最贵|贵的那个|价格最高|最便宜|便宜的那个|价格最低", text):
+        marked = [item for item in candidates if item.get("extreme_unique")]
+        if len(marked) != 1:
+            raise SelectionNeeded("最高或最低价格的产品尚未唯一确定，请选择具体房型或车辆。")
+        choice = marked[0]["id"]
     elif kind == "flight" and "最早" in text:
         marked = [item for item in candidates if item.get("earliest_unique")]
         if len(marked) != 1:
@@ -112,6 +117,13 @@ def _compatible_candidate(kind, choice, groups, text, today):
             raise SelectionNeeded("所选航班与本轮地点不一致，请重新查询。")
     if kind == "hotel" and days and item.get("check_in") and item["check_in"] not in days:
         raise SelectionNeeded("所选酒店与本轮入住日期不一致，请重新查询。")
+    if kind == "rental":
+        candidate_days = {item.get("pickup_date"), item.get("drop_off_date")}
+        if days and not days.issubset(candidate_days):
+            raise SelectionNeeded("所选车辆与本轮取还日期不一致，请重新查询。")
+        places = mentioned_cities(text)
+        if any(place not in {item.get("city"), item.get("airport")} for place in places):
+            raise SelectionNeeded("所选车辆与本轮地点不一致，请重新查询。")
     return item
 
 
@@ -149,7 +161,7 @@ def _date_grounded(value, text, today):
     return False
 
 
-def _dates_grounded(action_type, params, text, today, candidate=None):
+def _dates_grounded(action_type, params, text, today, candidate=None, grounded=None):
     if action_type.startswith("hotel_") and action_type != "hotel_cancel":
         start, end = params.get("check_in"), params.get("check_out")
         if not (_date_grounded(start, text, today) or
@@ -164,25 +176,33 @@ def _dates_grounded(action_type, params, text, today, candidate=None):
         except (TypeError, ValueError):
             return False
     if action_type.startswith("rental_") and action_type != "rental_cancel":
+        grounded = grounded if isinstance(grounded, dict) and grounded.get("intent") == "rental_search" else {}
         for field in ("pickup_at", "dropoff_at"):
             value = params.get(field)
             if not isinstance(value, str) or "T" not in value:
                 return False
             day, time = value.split("T", 1)
-            if not _date_grounded(day, text, today):
+            prefix = "pickup" if field == "pickup_at" else "dropoff"
+            context_day = grounded.get("pickup_date" if prefix == "pickup" else "drop_off_date")
+            context_clock = grounded.get(f"{prefix}_clock")
+            if ((context_day and context_day != day)
+                    or (context_clock and context_clock != time[:5])):
+                return False
+            from_context = context_day == day and context_clock == time[:5]
+            if not _date_grounded(day, text, today) and not from_context:
                 return False
             hour, minute = time[:2], time[3:5]
             if not hour.isdigit() or not minute.isdigit():
                 return False
             clock = (time[:5] in text or f"{int(hour)}点{int(minute)}" in text
                      or (minute == "00" and f"{int(hour)}点" in text))
-            if not clock:
+            if not clock and not from_context:
                 return False
     return True
 
 
 def prepare_actions(db, traveler_id, plans, references, user_text,
-                    context_text=None, today=None):
+                    context_text=None, today=None, grounded_context=None):
     if not isinstance(plans, list) or not 1 <= len(plans) <= 2:
         raise SelectionNeeded("请说明要办理的一到两笔具体交易。")
     if re.search(r"改签.+(?:并|同时|再).*(?:订|预订).*(?:酒店|房)", user_text):
@@ -216,12 +236,25 @@ def prepare_actions(db, traveler_id, plans, references, user_text,
                 params[key] = _product_choice(kind, params.get(key), references, user_text)
             candidate = _compatible_candidate(kind, params[key], references, user_text, today)
             if kind == "hotel" and candidate:
+                for date_key in ("check_in", "check_out"):
+                    shown_date = candidate.get(date_key)
+                    if shown_date is not None and params.get(date_key) not in (None, shown_date):
+                        raise SelectionNeeded("酒店日期与当前房型候选不一致，请重新查询。")
                 params.setdefault("check_in", candidate.get("check_in"))
                 params.setdefault("check_out", candidate.get("check_out"))
         else:
             candidate = None
+        if (kind == "rental" and operation in ("book", "change")
+                and isinstance(grounded_context, dict)
+                and grounded_context.get("intent") == "rental_search"):
+            for field, day_key, clock_key in (("pickup_at", "pickup_date", "pickup_clock"),
+                                              ("dropoff_at", "drop_off_date", "dropoff_clock")):
+                day, clock = grounded_context.get(day_key), grounded_context.get(clock_key)
+                if day and clock:
+                    params.setdefault(field, f"{day}T{clock}")
         if today is not None and not _dates_grounded(action_type, params,
-                                                     context_text, today, candidate):
+                                                     context_text, today, candidate,
+                                                     grounded_context):
             raise SelectionNeeded("请明确酒店日期或租车的取还车日期和当地时刻。")
         if set(params) != FIELDS[action_type]:
             raise SelectionNeeded("交易日期、时刻或产品信息不完整，请补充后再生成确认卡。")

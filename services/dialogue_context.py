@@ -13,6 +13,10 @@ _OFFSETS = {"今天": 0, "明天": 1, "后天": 2, "大后天": 3}
 _ABSOLUTE = re.compile(r"(?<!\d)(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?")
 _MONTH_DAY = re.compile(r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日")
 _WRITE = re.compile(r"预订|预定|下单|订票|订.{0,10}(?:机票|航班|酒店|房|车)|购买|买票|改签|改期|取消")
+_NUMBER = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6,
+           "七": 7, "八": 8, "九": 9, "十": 10}
+_NIGHTS = re.compile(r"(?:住|订|预订|预定)?\s*([一二两三四五六七八九十\d]{1,2})\s*晚")
+_CLOCK = re.compile(r"(凌晨|早上|上午|中午|下午|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|点(半|\d{1,2}分?)?)")
 
 
 def requested_actions(text: str) -> list[str]:
@@ -99,6 +103,44 @@ def mentioned_dates(text: str, base: date) -> list[date]:
     return [value for _, value in sorted(found)]
 
 
+def stay_nights(text: str, dates: list[date]) -> int | None:
+    match = _NIGHTS.search(text)
+    if match:
+        raw = match.group(1)
+        value = int(raw) if raw.isdigit() else _NUMBER.get(raw)
+        return value if value is not None and 1 <= value <= 14 else None
+    if len(dates) >= 2 and re.search(r"(?:都|全部).{0,4}住|住.{0,4}(?:都|全部)", text):
+        value = (dates[1] - dates[0]).days + 1
+        return value if 1 <= value <= 14 else None
+    return None
+
+
+def rental_clocks(text: str) -> dict[str, str]:
+    """Extract only user-written wall times, never infer an airport offset."""
+    result = {}
+    for segment in re.split(r"[，,；;、]", text):
+        found = list(_CLOCK.finditer(segment))
+        for index, match in enumerate(found):
+            period, raw_hour, raw_minute, after_point = match.groups()
+            hour = int(raw_hour)
+            minute = (int(raw_minute) if raw_minute is not None else
+                      30 if after_point == "半" else
+                      int(after_point.rstrip("分")) if after_point and after_point != "半" else 0)
+            if not 0 <= minute < 60 or not 0 <= hour <= 23:
+                continue
+            if period in ("下午", "晚上") and hour < 12:
+                hour += 12
+            elif period == "凌晨" and hour == 12:
+                hour = 0
+            role = ("dropoff" if "还" in segment and "取" not in segment else
+                    "pickup" if "取" in segment and "还" not in segment else
+                    "pickup" if index == 0 and len(found) >= 2 else
+                    "dropoff" if index == 1 and len(found) >= 2 else None)
+            if role:
+                result[f"{role}_clock"] = f"{hour:02d}:{minute:02d}"
+    return result
+
+
 def read_request(text: str, intent: str, params: dict, previous: dict,
                  base: date) -> tuple[str, dict, dict]:
     """Normalize only read paths. Transaction parameters remain guarded elsewhere."""
@@ -109,6 +151,9 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
     capability = bool(re.search(r"联网|实时查询|能上网|能搜索", text)) and not weather
     hotel_coverage = bool(re.search(r"(?:哪[个些边]|哪些).{0,12}机场.{0,8}酒店|机场.{0,8}(?:有|附近).{0,5}酒店", text))
     hotel = bool(re.search(r"酒店|住宿|住哪|订房", text))
+    nights = stay_nights(text, dates)
+    rank = ("max" if re.search(r"最贵|贵的那个|价格最高", text) else
+            "min" if re.search(r"最便宜|便宜的那个|价格最低", text) else None)
     flight = bool(re.search(r"(?:查|找|搜索|有没有).{0,40}(?:航班|机票)|"
                             r"(?:航班|机票).{0,8}(?:查询|搜索)", text))
     earliest = bool(re.search(r"最早|最近.{0,8}(?:能|可).{0,4}(?:走|飞|出发|起飞)|"
@@ -147,26 +192,64 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
                                 ("departure", "arrival", "travel_date")},
                               "hotel": {key: context.get(key) for key in
                                 ("city", "check_in", "check_out")}}, context
-    rental = bool(re.search(r"租车|取车|还车|车辆", text))
-    if rental or (previous.get("intent") == "rental_search" and (places or dates)
+    rental = bool(re.search(r"租车|取车|还车|车辆|租.{0,8}车", text))
+    if previous.get("intent") == "rental_search" and rank and "车" in text:
+        rental = True
+    clocks = rental_clocks(text) if (rental or previous.get("intent") == "rental_search") else {}
+    if rental or (previous.get("intent") == "rental_search" and (places or dates or clocks or rank)
                   and not hotel and not flight and not direct_route):
         context = dict(previous) if previous.get("intent") == "rental_search" else {"intent": "rental_search"}
         if places:
+            if context.get("city") != places[-1]:
+                for key in ("pickup_date", "drop_off_date", "pickup_clock", "dropoff_clock"):
+                    context.pop(key, None)
             context["city"] = places[-1]
         if len(dates) >= 2:
             context["pickup_date"], context["drop_off_date"] = (value.isoformat() for value in dates[:2])
-        elif dates and "pickup_date" not in context:
-            context["pickup_date"] = dates[0].isoformat()
+        elif dates:
+            if "还" in text and "取" not in text:
+                context["drop_off_date"] = dates[0].isoformat()
+            elif "取" in text or "pickup_date" not in context:
+                context["pickup_date"] = dates[0].isoformat()
+        context.update(clocks)
+        if re.search(r"(?:租|用|要)?\s*(?:两|二|2)\s*天", text):
+            context["duration_hours"] = 48
+        if rank:
+            context["rank"] = rank
         return "rental_search", context, context
-    if hotel or (previous.get("intent") == "hotel_search" and (places or dates)
+    if hotel or (previous.get("intent") == "hotel_search" and (places or dates or nights or rank)
                  and not rental and not flight and not direct_route):
         context = dict(previous) if previous.get("intent") == "hotel_search" else {"intent": "hotel_search"}
         if places:
+            if context.get("city") != places[-1]:
+                for key in ("check_in", "check_out", "nights"):
+                    context.pop(key, None)
             context["city"] = places[-1]
+        context.pop("date_conflict", None)
         if len(dates) >= 2:
             context["check_in"], context["check_out"] = (value.isoformat() for value in dates[:2])
-        elif dates and "check_in" not in context:
-            context["check_in"] = dates[0].isoformat()
+            if nights is None:
+                context["nights"] = (dates[1] - dates[0]).days
+        elif dates:
+            if "退房" in text and context.get("check_in"):
+                context["check_out"] = dates[0].isoformat()
+                if nights is None:
+                    context["nights"] = (dates[0] - date.fromisoformat(context["check_in"])).days
+            else:
+                context["check_in"] = dates[0].isoformat()
+        if nights is not None:
+            context["nights"] = nights
+        if context.get("nights") and context.get("check_in"):
+            derived = (date.fromisoformat(context["check_in"]) +
+                       timedelta(days=context["nights"])).isoformat()
+            explicit_checkout = (len(dates) >= 2 and "退房" in text or
+                                 len(dates) == 1 and "退房" in text)
+            if explicit_checkout and context.get("check_out") != derived:
+                context["date_conflict"] = True
+            else:
+                context["check_out"] = derived
+        if rank:
+            context["rank"] = rank
         return "hotel_search", context, context
     if (direct_route or flight or earliest and bool(re.search(r"航班|机票|班次|起飞", text))
             or previous.get("intent") == "flight_search" and (dates or earliest)):

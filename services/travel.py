@@ -180,7 +180,7 @@ def _distance_km(source, target):
 
 
 def _search_options(limit, offset, sort, allowed):
-    if (type(limit) is not int or not 1 <= limit <= 100
+    if (type(limit) is not int or not 1 <= limit <= 500
             or type(offset) is not int or not 0 <= offset <= 10000
             or sort not in allowed):
         raise OrderError("invalid product search options")
@@ -198,7 +198,7 @@ def _reference_airport(session, airport_code, city):
 
 def find_hotels(session, city, check_in, check_out, *, airport=None,
                 limit=20, offset=0, sort="price"):
-    _search_options(limit, offset, sort, ("price", "distance"))
+    _search_options(limit, offset, sort, ("price", "price_desc", "distance"))
     if not city or (sort == "distance" and not airport):
         raise OrderError("city and distance reference are required")
     if not _product_dates(session, check_in, check_out):
@@ -236,6 +236,8 @@ def find_hotels(session, city, check_in, check_out, *, airport=None,
         rows.sort(key=lambda row: (row["distance_km"] is None,
                                    row["distance_km"] or 0,
                                    row["nightly_price"], row["product_id"]))
+    elif sort == "price_desc":
+        rows.sort(key=lambda row: (-row["nightly_price"], row["product_id"]))
     else:
         rows.sort(key=lambda row: (row["nightly_price"], row["product_id"]))
     return rows[offset:offset + limit]
@@ -243,7 +245,7 @@ def find_hotels(session, city, check_in, check_out, *, airport=None,
 
 def find_rentals(session, pickup_date, drop_off_date, *, airport=None, city=None,
                  max_daily_price=None, limit=20, offset=0, sort="price"):
-    _search_options(limit, offset, sort, ("price", "distance"))
+    _search_options(limit, offset, sort, ("price", "price_desc", "distance"))
     if not airport and not city:
         raise OrderError("airport or city is required")
     if sort == "distance" and not airport:
@@ -281,6 +283,8 @@ def find_rentals(session, pickup_date, drop_off_date, *, airport=None, city=None
         rows.sort(key=lambda row: (row["distance_km"] is None,
                                    row["distance_km"] or 0,
                                    row["daily_price"], row["id"]))
+    elif sort == "price_desc":
+        rows.sort(key=lambda row: (-row["daily_price"], row["id"]))
     else:
         rows.sort(key=lambda row: (row["daily_price"], row["id"]))
     return rows[offset:offset + limit]

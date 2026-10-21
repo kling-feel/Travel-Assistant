@@ -167,7 +167,7 @@ def hotels_search(city: str = Query(min_length=1, max_length=80),
                   airport: str | None = Query(default=None, min_length=3, max_length=8),
                   limit: int = Query(default=20, ge=1, le=100),
                   offset: int = Query(default=0, ge=0, le=10000),
-                  sort: str = Query(default="price", pattern="^(price|distance)$"),
+                  sort: str = Query(default="price", pattern="^(price|price_desc|distance)$"),
                   traveler=Depends(current_traveler),
                   session: Session = Depends(get_db)):
     try:
@@ -185,7 +185,7 @@ def rentals_search(pickup_date: date, drop_off_date: date,
                    max_daily_price: int | None = Query(default=None, ge=0),
                    limit: int = Query(default=20, ge=1, le=100),
                    offset: int = Query(default=0, ge=0, le=10000),
-                   sort: str = Query(default="price", pattern="^(price|distance)$"),
+                   sort: str = Query(default="price", pattern="^(price|price_desc|distance)$"),
                    traveler=Depends(current_traveler),
                    session: Session = Depends(get_db)):
     try:
@@ -333,7 +333,8 @@ def conversation_turn(session_id: str, data: TurnRequest,
                 shown = [sum((list(items) for items in candidates.values()
                               if isinstance(items, list)), [])] if isinstance(candidates, dict) else []
                 resolved = prepare_actions(session, traveler["id"], plans,
-                                           shown, content, content, local_today())
+                                           shown, content, content, local_today(),
+                                           result.get("context"))
                 verify_shown_quotes(session, resolved, shown)
                 reused_count = 0
                 for index, (action_type, parameters) in enumerate(resolved):

@@ -67,13 +67,16 @@ def _safe_general(draft):
     return draft.strip()
 
 
-def _scoped_candidates(intent, references, params, *, earliest_id=None):
+def _scoped_candidates(intent, references, params, *, earliest_id=None,
+                       extreme_id=None):
     """Keep task scope in the checkpoint without changing public citations."""
     rows = []
     for item in references:
         if not isinstance(item, dict):
             continue
         scoped = dict(item)
+        if extreme_id is not None and item.get("id") == extreme_id:
+            scoped["extreme_unique"] = True
         if intent == "flight_search" and item.get("type") == "flight":
             if earliest_id is not None and item.get("id") == earliest_id:
                 scoped["earliest_unique"] = True
@@ -85,6 +88,9 @@ def _scoped_candidates(intent, references, params, *, earliest_id=None):
                                           len(str(params.get("arrival") or "")) == 3 else None)
         elif intent == "hotel_search" and item.get("type") == "hotel_product":
             scoped["city"] = params.get("city")
+        elif intent == "rental_search" and item.get("type") == "rental_product":
+            scoped["city"] = params.get("city")
+            scoped["airport"] = params.get("airport")
         rows.append(scoped)
     return rows
 
@@ -110,6 +116,28 @@ def build_graph(model, read_evidence, checkpointer):
                     "queries": [{"intent": "flight_search", "params": direct_params}]},
                     "context": direct_context, "task_contexts": tasks, "draft": ""}
             return {"intent": "flight_search", "params": direct_params,
+                    "context": direct_context, "task_contexts": tasks, "draft": ""}
+        rank_request = bool(re.search(r"最贵|贵的那个|价格最高|最便宜|便宜的那个|价格最低", user_text))
+        if rank_request and direct_intent in ("hotel_search", "rental_search"):
+            tasks = dict(state.get("task_contexts") or {})
+            tasks[direct_intent] = direct_context
+            book = bool(re.search(
+                r"预订|预定|下单|订房|订车|订.{0,8}(?:最贵|最便宜)|我要住|我想住|租.{0,8}车",
+                user_text))
+            if book:
+                kind = direct_intent.split("_")[0]
+                return {"intent": "transaction", "params": {
+                    "actions": [{"action_type": f"{kind}_book", "parameters": {}}],
+                    "queries": [{"intent": direct_intent, "params": direct_params}]},
+                    "context": direct_context, "task_contexts": tasks, "draft": ""}
+            return {"intent": direct_intent, "params": direct_params,
+                    "context": direct_context, "task_contexts": tasks, "draft": ""}
+        if (not writes and direct_intent == "rental_search"
+                and re.search(r"\d{1,2}(?::\d{2}|点)", user_text)
+                and re.search(r"取|还", user_text)):
+            tasks = dict(state.get("task_contexts") or {})
+            tasks["rental_search"] = direct_context
+            return {"intent": "rental_search", "params": direct_params,
                     "context": direct_context, "task_contexts": tasks, "draft": ""}
         if not writes and direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
             return {"intent": direct_intent, "params": direct_params,
@@ -216,7 +244,8 @@ def build_graph(model, read_evidence, checkpointer):
             intent, params, context = read_request(user_text, intent, params,
                                                    prior_context, base)
         else:
-            context = prior_context
+            context = (direct_context if direct_intent in
+                       ("hotel_search", "rental_search", "flight_search") else prior_context)
         tasks = dict(state.get("task_contexts") or {})
         if intent in ("flight_search", "hotel_search", "rental_search"):
             tasks[intent] = context
@@ -244,7 +273,8 @@ def build_graph(model, read_evidence, checkpointer):
                 groups = dict(state.get("candidates") or {})
                 groups[intent.split("_")[0]] = _scoped_candidates(
                     intent, result.get("references", []), params,
-                    earliest_id=result.get("earliest_id"))
+                    earliest_id=result.get("earliest_id"),
+                    extreme_id=result.get("extreme_unique_id"))
                 return {**result, "candidates": groups}
             return result
         return node
@@ -281,12 +311,19 @@ def build_graph(model, read_evidence, checkpointer):
             references.extend(result["references"])
             groups[query["intent"].split("_")[0]] = _scoped_candidates(
                 query["intent"], result["references"], query_params,
-                earliest_id=result.get("earliest_id"))
+                earliest_id=result.get("earliest_id"),
+                extreme_id=result.get("extreme_unique_id"))
             if (query["intent"] == "flight_search" and query_params.get("sort") == "earliest"
                     and any(isinstance(item, dict) and item.get("action_type") == "flight_book"
                             for item in plans) and result.get("earliest_id") is None):
                 plans = [item for item in plans if not isinstance(item, dict)
                          or item.get("action_type") != "flight_book"]
+            if (query["intent"] in ("hotel_search", "rental_search")
+                    and query_params.get("rank") in ("max", "min")
+                    and result.get("extreme_unique_id") is None):
+                kind = query["intent"].split("_")[0]
+                plans = [item for item in plans if not isinstance(item, dict)
+                         or item.get("action_type") != f"{kind}_book"]
         if not answers:
             answers.append("请说明要办理的订单或具体候选，以及日期和时间；有多个候选时请指定其中一个。")
         if len(plans) > 2:
