@@ -1,4 +1,4 @@
-"""Read-only check of the generated fictional schedule in the isolated DB."""
+"""Read-only check of a generated fictional schedule against its fixture."""
 
 import argparse
 import json
@@ -22,9 +22,12 @@ from services.flight_schedule import FLIGHT_SCHEDULE_RULE, great_circle_km
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--as-of", type=date.fromisoformat, default=date.today())
+    parser.add_argument("--formal-read-only", action="store_true",
+                        help="Explicitly audit the default demo DB after its approved rebuild")
     args = parser.parse_args()
-    if settings.POSTGRES_PORT != 5434 or settings.DATABASE_URL:
-        raise RuntimeError("Only the isolated database on port 5434 may be audited")
+    expected_port = 5433 if args.formal_read_only else 5434
+    if settings.POSTGRES_PORT != expected_port or settings.DATABASE_URL:
+        raise RuntimeError(f"Audit requires the selected local DB on port {expected_port}")
     with engine.connect() as db:
         as_of = db.execute(select(demo_state.c.as_of)).scalar_one()
         if as_of != args.as_of:
@@ -97,7 +100,9 @@ def main():
     }
     if long_under_five or landing_unavailable:
         raise AssertionError("Schedule or landing hotel supply failed full audit")
-    output = ROOT / "data/generated/p31e5-schedule-audit.json"
+    output = ROOT / ("data/generated/p31e6-formal-schedule-audit.json"
+                     if args.formal_read_only
+                     else "data/generated/p31e5-schedule-audit.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2),
                       encoding="utf-8")
