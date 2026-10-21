@@ -95,7 +95,7 @@ function local(value) {
   const text = String(value);
   const stamp = text.match(/^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)(?::\d\d(?:\.\d+)?)?(Z|[+-]\d\d:\d\d)?$/);
   if (!stamp) return text;
-  const zone = stamp[3] === "Z" || stamp[3] === "+00:00" ? " UTC" : stamp[3] ? ` ${stamp[3]}` : "";
+  const zone = stamp[3] === "Z" || stamp[3] === "+00:00" ? " +00:00" : stamp[3] ? ` ${stamp[3]}` : "";
   return `${stamp[1]} ${stamp[2]}${zone}`;
 }
 function localClock(value) {
@@ -163,8 +163,13 @@ function formatObject(value) {
 }
 function compactSnapshot(value, kind) {
   if (!value) return "新建订单";
-  if (kind.startsWith("flight_"))
-    return `${airportName(value.departure_airport)} → ${airportName(value.arrival_airport)} · ${value.departure_local ? localClock(value.departure_local) : localAtAirport(value.departure_at, value.departure_airport)}`;
+  if (kind.startsWith("flight_")) {
+    const departure = value.departure_local ? localClock(value.departure_local)
+      : localAtAirport(value.departure_at, value.departure_airport);
+    const arrival = value.arrival_local ? localClock(value.arrival_local)
+      : localAtAirport(value.arrival_at, value.arrival_airport);
+    return `${airportName(value.departure_airport)} → ${airportName(value.arrival_airport)} · 出发 ${departure} · 到达 ${arrival}`;
+  }
   if (kind.startsWith("hotel_")) {
     const start = Date.parse(`${value.check_in}T00:00:00Z`);
     const end = Date.parse(`${value.check_out}T00:00:00Z`);

@@ -327,7 +327,8 @@ class DialogueTests(unittest.TestCase):
             {"intent": "hotel_search", "params": {"city": "Basel"}, "answer": ""},
         )
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, client:
+        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+                                            return_value=date(2026, 10, 18)), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             flight = self.turn(client, sid, auth, "flight-001", "查 10 月 19 日 HAM 到 BSL 的航班")

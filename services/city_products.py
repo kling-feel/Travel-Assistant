@@ -3,11 +3,13 @@
 from datetime import date, timedelta
 from hashlib import sha256
 
-GENERATION_RULE = "reachable-products-v1"
+PRICE_SEED_RULE = "reachable-products-v1"
+GENERATION_RULE = "reachable-products-v2"
+HOTEL_LAST_CHECKOUT_OFFSET = 34
 
 
 def _amount(code: str, kind: str, variant: int, base: int, spread: int) -> int:
-    key = f"{GENERATION_RULE}|{code}|{kind}|{variant}".encode("ascii")
+    key = f"{PRICE_SEED_RULE}|{code}|{kind}|{variant}".encode("ascii")
     return base + int.from_bytes(sha256(key).digest()[:4], "big") % spread
 
 
@@ -42,7 +44,9 @@ def generate_products(airport_rows: list[dict], flight_rows: list[dict],
             price = (90 + variant * 30 if code == "BSL" else
                      _amount(code, "hotel", variant, 90 + variant * 20, 81))
             start = as_of + timedelta(days=7 if variant == 3 else 1)
-            end = as_of + timedelta(days=14 if variant == 2 else 31)
+            end = as_of + timedelta(days=(
+                14 if variant == 2 else 31 if variant == 3
+                else HOTEL_LAST_CHECKOUT_OFFSET))
             hotel_rows.append(dict(
                 id=hotel_id, name=f"虚构·{airport['city']}机场周边酒店 {variant}",
                 city=airport["city"], price_tier="Simulated",

@@ -1,5 +1,6 @@
 """Create local-only visual test cards in the isolated P3.1e4 database."""
 
+import argparse
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -20,9 +21,12 @@ from utils.password_hash import get_hashed_password
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--as-of", type=date.fromisoformat, default=date.today())
+    args = parser.parse_args()
     assert settings.POSTGRES_PORT == 5434 and not settings.DATABASE_URL
     with engine.begin() as db:
-        assert db.execute(select(demo_state.c.as_of)).scalar_one() == date.today()
+        assert db.execute(select(demo_state.c.as_of)).scalar_one() == args.as_of
         traveler_id = db.execute(select(travelers.c.id).where(
             travelers.c.username == "p31e4_visual")).scalar_one_or_none()
         if traveler_id is None:

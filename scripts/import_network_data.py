@@ -30,6 +30,8 @@ from scripts.verify_network_fixture import _shift, verify_fixture
 from services.city_products import generate_products
 from services.demo_pricing import (NETWORK_OFFER_RULE_ID, OFFER_VERSION,
                                    network_fare)
+from services.flight_schedule import (FLIGHT_SCHEDULE_RULE, fictional_duration,
+                                      great_circle_km)
 from services.policy_catalog import SEED_POLICIES
 from utils.password_hash import get_hashed_password
 
@@ -54,19 +56,35 @@ def prepare_snapshot(source: Path, as_of: date):
                              city=row["city"], timezone=row["timezone"],
                              latitude=row["latitude"], longitude=row["longitude"])
                         for row in db.execute("SELECT * FROM airports_data ORDER BY airport_code")]
+        airport_map = {row["code"]: row for row in airport_rows}
         zones = {row["code"]: ZoneInfo(row["timezone"]) for row in airport_rows}
         flight_rows, offer_rows = [], []
         statuses: Counter[str] = Counter()
         for row in db.execute("SELECT * FROM flights ORDER BY flight_id"):
             departure = _utc_shift(row["scheduled_departure"], shift)
+            origin = row["departure_airport"]
+            destination = row["arrival_airport"]
+            if origin == destination:
+                raise ValueError(f"Flight {row['flight_id']} has the same origin and destination")
+            duration = fictional_duration(great_circle_km(
+                airport_map[origin], airport_map[destination]))
+            arrival = departure + duration
+            source_arrival = _utc_shift(row["scheduled_arrival"], shift)
+            actual_departure = _utc_shift(row["actual_departure"], shift)
+            actual_arrival = _utc_shift(row["actual_arrival"], shift)
+            if actual_arrival is not None:
+                actual_arrival += arrival - source_arrival
+            if (actual_arrival is not None and actual_departure is not None
+                    and actual_arrival <= actual_departure):
+                raise ValueError(f"Flight {row['flight_id']} has invalid corrected actual times")
             flight_rows.append(dict(
                 id=row["flight_id"], flight_no=row["flight_no"],
                 departure_at=departure,
-                arrival_at=_utc_shift(row["scheduled_arrival"], shift),
-                actual_departure_at=_utc_shift(row["actual_departure"], shift),
-                actual_arrival_at=_utc_shift(row["actual_arrival"], shift),
-                departure_airport=row["departure_airport"],
-                arrival_airport=row["arrival_airport"], status=row["status"],
+                arrival_at=arrival,
+                actual_departure_at=actual_departure,
+                actual_arrival_at=actual_arrival,
+                departure_airport=origin,
+                arrival_airport=destination, status=row["status"],
             ))
             statuses[row["status"]] += 1
             local_date = departure.astimezone(zones[row["departure_airport"]]).date()
@@ -88,6 +106,7 @@ def prepare_snapshot(source: Path, as_of: date):
         raise ValueError("Not all bookable routes have an offer")
     if statuses["Scheduled"] != 15383 or report["scheduled_routes"] != 618:
         raise ValueError("Unexpected flight states or route coverage")
+    report["generated_schedule_rule"] = FLIGHT_SCHEDULE_RULE
     by_id = {row["id"]: row for row in flight_rows}
     fares = {row["flight_id"]: row["amount"] for row in offer_rows}
     for flight_id in (8144, 8152):

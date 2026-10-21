@@ -14,6 +14,7 @@ from sqlalchemy import and_, func, insert, or_, select, update
 from db.travel_models import (airports, demo_state, flight_offers, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, policy_documents, rental_orders,
                               rental_products)
+from services.city_products import HOTEL_LAST_CHECKOUT_OFFSET
 from services.policy_catalog import CURRENT_POLICIES
 from services.demo_pricing import NETWORK_OFFER_RULE_ID, OFFER_RULE_ID
 
@@ -164,13 +165,13 @@ def find_earliest_flights(session, departures, arrivals, *, not_before=None,
     return {"rows": rows, "tie_count": ties, "last_day": last_day}
 
 
-def _product_dates(session, start, end):
+def _product_dates(session, start, end, *, max_offset=31):
     if not isinstance(start, date) or not isinstance(end, date) or end <= start:
         raise OrderError("invalid product dates")
     as_of = session.execute(select(demo_state.c.as_of).where(
         demo_state.c.id == 1)).scalar_one_or_none()
     return as_of is None or (as_of + timedelta(days=1) <= start
-                             and end <= as_of + timedelta(days=31))
+                             and end <= as_of + timedelta(days=max_offset))
 
 
 def _distance_km(source, target):
@@ -202,7 +203,8 @@ def find_hotels(session, city, check_in, check_out, *, airport=None,
     _search_options(limit, offset, sort, ("price", "price_desc", "distance"))
     if not city or (sort == "distance" and not airport):
         raise OrderError("city and distance reference are required")
-    if not _product_dates(session, check_in, check_out):
+    if not _product_dates(session, check_in, check_out,
+                          max_offset=HOTEL_LAST_CHECKOUT_OFFSET):
         return []
     reference = _reference_airport(session, airport, city)
     if airport and reference is None:
