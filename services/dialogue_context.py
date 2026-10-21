@@ -51,6 +51,16 @@ def requested_actions(text: str) -> list[str]:
     return actions
 
 
+def flight_followup(text: str, previous: dict) -> bool:
+    """A short flight follow-up may resume its own task after another read topic."""
+    if not isinstance(previous, dict) or previous.get("intent") != "flight_search":
+        return False
+    if re.search(r"天气|景点|游览|推荐|酒店|住宿|租车|政策|规则|取消|改签", text):
+        return False
+    return bool(re.search(r"机票|航班|班次|起飞|飞往|出发|最早|这班|那班|前面|刚才", text)
+                or mentioned_cities(text) and re.search(r"(?:想|要|打算)?去|(?:从|在).{0,16}出发", text))
+
+
 def local_today() -> date:
     """Traveler-facing relative dates use the current China calendar day."""
     return datetime.now(ZoneInfo("Asia/Shanghai")).date()
@@ -156,6 +166,11 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
     """Normalize only read paths. Transaction parameters remain guarded elsewhere."""
     previous = previous if isinstance(previous, dict) else {}
     places, dates = mentioned_cities(text), mentioned_dates(text, base)
+    abandoned = re.search(r"不去(.{1,20}?)(?:了|，|,|；|;|改成)", text)
+    if abandoned:
+        discarded = set(mentioned_cities(abandoned.group(1)))
+        if discarded:
+            places = [place for place in places if place not in discarded]
     direct_route = bool(re.search(r"(?:从|由).{1,35}(?:到|去|飞往).{1,35}", text)) and len(places) >= 2
     weather = bool(re.search(r"天气|气温|降雨|下雨|晴天", text))
     capability = bool(re.search(r"联网|实时查询|能上网|能搜索", text)) and not weather
@@ -164,8 +179,9 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
     nights = stay_nights(text, dates)
     rank = ("max" if re.search(r"最贵|贵的那个|价格最高", text) else
             "min" if re.search(r"最便宜|便宜的那个|价格最低", text) else None)
-    flight = bool(re.search(r"(?:查|找|搜索|有没有).{0,40}(?:航班|机票)|"
-                            r"(?:航班|机票).{0,8}(?:查询|搜索)", text))
+    flight_booking = "flight_book" in requested_actions(text)
+    flight = flight_booking or bool(re.search(r"(?:查|找|搜索|有没有).{0,40}(?:航班|机票)|"
+                                       r"(?:航班|机票).{0,8}(?:查询|搜索)", text))
     earliest = bool(re.search(r"最早|最近.{0,8}(?:能|可).{0,4}(?:走|飞|出发|起飞)|"
                               r"(?:什么时候|何时).{0,8}(?:能|可)?.{0,4}(?:走|飞|出发|起飞)", text))
     recommendation = bool(re.search(r"推荐|旅游|旅行|好看|好玩|去哪", text))
@@ -262,22 +278,48 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
             context["rank"] = rank
         return "hotel_search", context, context
     if (direct_route or flight or earliest and bool(re.search(r"航班|机票|班次|起飞", text))
-            or previous.get("intent") == "flight_search" and (dates or earliest)):
+            or previous.get("intent") == "flight_search"
+            and (dates or earliest or flight_followup(text, previous))):
         context = dict(previous) if previous.get("intent") == "flight_search" else {"intent": "flight_search"}
+        sources = dict(context.get("_sources") or {})
+        old_route = (context.get("departure"), context.get("arrival"))
         if len(places) >= 2:
-            if (context.get("departure"), context.get("arrival")) != (places[0], places[-1]):
-                context.pop("travel_date", None)
+            if old_route != (places[0], places[-1]):
+                for key in ("travel_date", "not_before", "sort", "_goal"):
+                    context.pop(key, None)
+                for key in ("travel_date", "not_before"):
+                    sources.pop(key, None)
             context["departure"], context["arrival"] = places[0], places[-1]
-        elif places and "departure" not in context:
-            context["departure"] = places[0]
+            sources.update(departure="user", arrival="user")
+        elif places:
+            departure = bool(re.search(r"我(?:人)?(?:现在|目前)?(?:就)?在|我住在|从|由|出发", text))
+            arrival = bool(re.search(r"(?:想|要|打算|准备)?去|到|飞往|目的地", text))
+            field = ("departure" if departure and not arrival else
+                     "arrival" if arrival and not departure else
+                     "departure" if not context.get("departure") and context.get("arrival") else
+                     "arrival" if not context.get("arrival") and context.get("departure") else None)
+            if field:
+                if context.get(field) not in (None, places[0]):
+                    for key in ("travel_date", "not_before", "sort", "_goal"):
+                        context.pop(key, None)
+                    for key in ("travel_date", "not_before"):
+                        sources.pop(key, None)
+                context[field] = places[0]
+                sources[field] = "user"
         if dates:
             context["travel_date"] = dates[0].isoformat()
+            sources["travel_date"] = "user"
         if earliest:
             context["sort"] = "earliest"
             context["not_before"] = context.get("travel_date")
-        else:
+            if dates:
+                sources["not_before"] = "user"
+        elif dates or (len(places) >= 2 and old_route != (places[0], places[-1])):
             context.pop("sort", None)
             context.pop("not_before", None)
+        if flight_booking:
+            context["_goal"] = "book"
+        context["_sources"] = sources
         return "flight_search", context, context
     if intent in ("flight_search", "hotel_search"):
         return intent, params, {"intent": intent, **params}

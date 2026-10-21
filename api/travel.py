@@ -47,6 +47,13 @@ bearer = HTTPBearer()
 logger = logging.getLogger(__name__)
 
 
+class _MemoryOnlyModel:
+    """The memory route can answer from the checkpoint without an API call."""
+
+    def invoke(self, _messages):
+        raise ModelUnavailable("model unavailable for this request")
+
+
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1)
@@ -263,7 +270,16 @@ def conversation_turn(session_id: str, data: TurnRequest,
     try:
         turn, created = begin_turn(session, traveler["id"], session_id,
                                    data.request_key, content)
-        model = get_chat_model() if created else None
+        if created:
+            try:
+                model = get_chat_model()
+            except ModelUnavailable:
+                if not re.search(r"你记得|还记得|前面说过什么|刚才聊了什么|我们聊过什么",
+                                 content):
+                    raise
+                model = _MemoryOnlyModel()
+        else:
+            model = None
         session.commit()
     except SessionNotFound as error:
         session.rollback()
@@ -295,6 +311,8 @@ def conversation_turn(session_id: str, data: TurnRequest,
                 if intent == "action_guidance":
                     return read_action_guidance(read_db, traveler["id"], session_id,
                                                 params.get("mode"))
+                if intent == "memory_cards":
+                    return {"cards": list_proposals(read_db, traveler["id"], session_id)}
                 if intent == "recommendation":
                     return read_recommendation(
                         read_db, traveler["id"], params.get("user_text", ""),
@@ -315,10 +333,15 @@ def conversation_turn(session_id: str, data: TurnRequest,
             raise ValueError("invalid graph result")
         actions = []
         plans = result.get("transaction_plan") or []
-        logger.info("dialogue_route intent=%s action_types=%s reference_count=%d",
+        flight_task = (result.get("task_contexts") or {}).get("flight_search") or {}
+        logger.info("dialogue_route intent=%s action_types=%s reference_count=%d "
+                    "flight_fields=%s flight_candidate_count=%d",
                     result.get("intent"),
                     [item.get("action_type") for item in plans if isinstance(item, dict)],
-                    len(references))
+                    len(references),
+                    sorted(key for key in ("departure", "arrival", "travel_date",
+                                           "not_before", "sort") if flight_task.get(key)),
+                    len((result.get("candidates") or {}).get("flight") or []))
         mass_cancel = ("取消" in content and bool(re.search(r"所有|全部", content))
                        and "机票" in content and "酒店" in content)
         overview = ""
@@ -330,6 +353,14 @@ def conversation_turn(session_id: str, data: TurnRequest,
             try:
                 lock_processing_turn(session, traveler["id"], session_id, turn["id"])
                 candidates = result.get("candidates") or {}
+                flight_task = (result.get("task_contexts") or {}).get("flight_search") or {}
+                if not candidates.get("flight") and any(
+                        isinstance(plan, dict) and plan.get("action_type") == "flight_book"
+                        for plan in plans):
+                    if flight_task.get("departure") or flight_task.get("arrival"):
+                        raise SelectionNeeded("当前航班任务的候选已变化，请按现有路线重新查询并选择。")
+                    if re.search(r"前面|刚才|上面", content):
+                        raise SelectionNeeded("本会话尚未查询过该航班，请先查询并核对班次。")
                 shown = [sum((list(items) for items in candidates.values()
                               if isinstance(items, list)), [])] if isinstance(candidates, dict) else []
                 resolved = prepare_actions(session, traveler["id"], plans,

@@ -314,7 +314,7 @@ class DialogueTests(unittest.TestCase):
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             response = self.turn(client, sid, auth, "booking-001", "帮我订票")
             self.assertEqual(response.status_code, 200, response.text)
-            self.assertIn("具体候选", response.json()["answer"])
+            self.assertIn("出发地", response.json()["answer"])
             self.assertEqual(response.json()["references"], [])
         with self.engine.connect() as db:
             self.assertEqual(db.execute(select(pending_actions.c.id)).all(), [])
