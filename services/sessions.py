@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import func, insert, select, update
 
-from db.travel_models import chat_messages, chat_sessions
+from db.travel_models import chat_messages, chat_sessions, chat_turns
 
 
 class SessionNotFound(ValueError):
@@ -53,6 +53,15 @@ def get_session_history(db, traveler_id, session_id):
         .order_by(chat_messages.c.sequence)).mappings()
     return {**_public_session(session_row),
             "messages": [dict(row) for row in messages]}
+
+
+def latest_session_references(db, traveler_id, session_id):
+    _owned_session(db, traveler_id, session_id)
+    return db.execute(select(chat_turns.c.references).where(
+        chat_turns.c.session_id == session_id,
+        chat_turns.c.status == "completed",
+    ).order_by(chat_turns.c.started_at.desc(), chat_turns.c.id.desc()).limit(1)
+    ).scalar_one_or_none() or []
 
 
 def append_message(db, traveler_id, session_id, role, content):

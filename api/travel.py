@@ -2,7 +2,8 @@
 
 import logging
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from typing import Literal
 from uuid import UUID, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,12 +17,13 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from db.travel_models import airports, travelers
-from services.location_labels import airport_zh, city_zh
+from services.location_labels import airport_zh, city_zh, product_zh, amount_zh
 from services.travel import (OrderError, find_flights, find_hotels, find_rentals,
                              itinerary, policies)
 from services.sessions import (SessionNotFound, append_message,
                                create_session as create_chat_session,
-                               get_session_history, list_sessions, _owned_session)
+                               get_session_history, latest_session_references,
+                               list_sessions, _owned_session)
 from services.actions import (ActionError, ActionNotFound, create_proposal,
                               get_proposal, list_proposals)
 from services.confirmations import confirm_action, reject_action, list_action_history
@@ -54,6 +56,30 @@ class _MemoryOnlyModel:
         raise ModelUnavailable("model unavailable for this request")
 
 
+def _card_brief(card):
+    """A short, database-backed summary; the review card holds full policy details."""
+    after = card.get("after") or {}
+    kind = card["action_type"].split("_", 1)[0]
+    if kind == "flight":
+        departure_local = after.get("departure_local")
+        try:
+            when = datetime.fromisoformat(departure_local).strftime("%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            when = "待核对"
+        route = (f"{airport_zh(after.get('departure_airport', ''), '')} → "
+                 f"{airport_zh(after.get('arrival_airport', ''), '')}")
+        target = f"{route}，航班 {after.get('flight_no', '—')}，当地出发 {when}"
+    elif kind == "hotel":
+        target = (f"{product_zh(after.get('hotel_name', ''), city=after.get('hotel_city', ''))}，"
+                  f"{after.get('check_in', '—')} 入住至 {after.get('check_out', '—')} 退房")
+    else:
+        target = (f"{product_zh(after.get('product_name', ''), airport=after.get('airport_code', ''))}，"
+                  f"{after.get('pickup_local', '—')} 取车至 {after.get('dropoff_local', '—')} 还车")
+    amount = (card.get("price") or {}).get("new_amount")
+    price = f"，参考总价 {amount_zh(amount)}" if card["action_type"].endswith("_book") and isinstance(amount, int) else ""
+    return target + price
+
+
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1)
@@ -77,6 +103,26 @@ class TurnRequest(BaseModel):
 
 class EmptyActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class CandidateProposalRequest(BaseModel):
+    """A visible search choice; the server looks up every business fact again."""
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["flight", "hotel", "rental"]
+    candidate_id: int | str
+    unit_price: int = Field(ge=0)
+    offer_version: int | None = Field(default=None, ge=1)
+    departure: str | None = Field(default=None, min_length=3, max_length=8)
+    arrival: str | None = Field(default=None, min_length=3, max_length=8)
+    travel_date: date | None = None
+    city: str | None = Field(default=None, min_length=1, max_length=80)
+    airport: str | None = Field(default=None, min_length=3, max_length=8)
+    check_in: date | None = None
+    check_out: date | None = None
+    pickup_date: date | None = None
+    drop_off_date: date | None = None
+    pickup_clock: time | None = None
+    dropoff_clock: time | None = None
 
 
 def current_traveler(credentials: HTTPAuthorizationCredentials = Depends(bearer),
@@ -238,6 +284,79 @@ def session_history(session_id: str, traveler=Depends(current_traveler),
         raise HTTPException(404, str(error)) from error
 
 
+@router.post("/sessions/{session_id}/candidate-proposals", status_code=201)
+def propose_visible_candidate(session_id: str, data: CandidateProposalRequest,
+                              traveler=Depends(current_traveler),
+                              session: Session = Depends(get_db)):
+    """Selecting a candidate makes a review card, never an order."""
+    try:
+        _owned_session(session, traveler["id"], session_id)
+        if isinstance(data.candidate_id, str) and len(data.candidate_id) > 80:
+            raise ValueError("candidate identifier is invalid")
+        if data.kind == "flight":
+            if (type(data.candidate_id) is not int or not data.departure or
+                    not data.arrival or not data.travel_date or data.offer_version is None):
+                raise ValueError("flight selection is incomplete")
+            rows = find_flights(session, data.departure.upper(), data.arrival.upper(),
+                                data.travel_date, limit=100)
+            row = next((item for item in rows if item["id"] == data.candidate_id), None)
+            if (row is None or row["demo_fare_amount"] != data.unit_price or
+                    row["offer_version"] != data.offer_version):
+                raise ValueError("flight candidate or quote changed; search again")
+            action_type, parameters = "flight_book", {"flight_id": row["id"]}
+        elif data.kind == "hotel":
+            if (not isinstance(data.candidate_id, str) or not data.city or
+                    not data.check_in or not data.check_out):
+                raise ValueError("hotel selection is incomplete")
+            rows = find_hotels(session, data.city, data.check_in, data.check_out,
+                               airport=data.airport, limit=100)
+            row = next((item for item in rows
+                        if item["product_id"] == data.candidate_id), None)
+            if row is None or row["nightly_price"] != data.unit_price:
+                raise ValueError("hotel candidate or quote changed; search again")
+            action_type = "hotel_book"
+            parameters = {"product_id": row["product_id"],
+                          "check_in": data.check_in.isoformat(),
+                          "check_out": data.check_out.isoformat()}
+        else:
+            if (not isinstance(data.candidate_id, str) or
+                    not (data.airport or data.city) or not data.pickup_date or
+                    not data.drop_off_date or not data.pickup_clock or
+                    not data.dropoff_clock or data.pickup_clock.second or
+                    data.dropoff_clock.second or data.pickup_clock.microsecond or
+                    data.dropoff_clock.microsecond or data.pickup_clock.tzinfo or
+                    data.dropoff_clock.tzinfo):
+                raise ValueError("rental selection needs local pickup and return times")
+            rows = find_rentals(session, data.pickup_date, data.drop_off_date,
+                                airport=data.airport, city=data.city, limit=100)
+            row = next((item for item in rows if item["id"] == data.candidate_id), None)
+            if row is None or row["daily_price"] != data.unit_price:
+                raise ValueError("rental candidate or quote changed; search again")
+            action_type = "rental_book"
+            parameters = {"product_id": row["id"],
+                          "pickup_at": f"{data.pickup_date}T{data.pickup_clock:%H:%M}",
+                          "dropoff_at": f"{data.drop_off_date}T{data.dropoff_clock:%H:%M}"}
+        card = create_proposal(session, traveler["id"], session_id,
+                               action_type, parameters, reuse_pending=True)
+        session.commit()
+        return card
+    except SessionNotFound as error:
+        session.rollback()
+        raise HTTPException(404, str(error)) from error
+    except (ValueError, OrderError, ActionError) as error:
+        session.rollback()
+        raise HTTPException(409, str(error)) from error
+
+
+@router.get("/sessions/{session_id}/references")
+def session_references(session_id: str, traveler=Depends(current_traveler),
+                       session: Session = Depends(get_db)):
+    try:
+        return latest_session_references(session, traveler["id"], session_id)
+    except SessionNotFound as error:
+        raise HTTPException(404, str(error)) from error
+
+
 @router.post("/sessions/{session_id}/messages", status_code=201)
 def add_user_message(session_id: str, data: UserMessage,
                      traveler=Depends(current_traveler),
@@ -386,6 +505,8 @@ def conversation_turn(session_id: str, data: TurnRequest,
                           card_notice +
                           "请在下方逐张核对对象、时间、金额和政策，再选择确认或放弃。"
                           "你确认前，订单不会改变。")
+                if len(actions) == 1:
+                    answer += "\n本轮对象：" + _card_brief(actions[0]) + "。"
                 if read_answer:
                     answer += "\n同时查到：" + read_answer
             except (SelectionNeeded, ActionError) as error:

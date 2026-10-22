@@ -111,6 +111,12 @@ P2.4c 的酒店和租车产品由 [生成规则](services/city_products.py) 根�
 
    对话生成卡片：在同一会话用 `/turns` 查询本人行程和模拟候选，明确具体班次、酒店房型或车辆以及所需日期。旅客可以说“把我的机票改签到第二班，并订第一家酒店，2026-10-19 入住一晚”；演示日期应换成当前 `demo_state.as_of` 后的可用日期。若候选或时间仍不明确，响应只有追问和 `actions: []`；补齐信息后用**新的** `request_key` 再发一轮。条件齐备时 `/turns` 返回一到两张 `actions` 待确认卡，各有自己的动作 ID、模拟金额和有效期；此时订单没有变化。先通过 `GET .../actions/{action_id}` 核对最新状态，再对每张卡分别调用 `/confirm` 或 `/reject`。最后调用 `GET /api/v1/me/itinerary` 核对订单。重试同一轮时沿用原 `request_key` 和完全相同的 `content`，返回保存的卡片快照，不会重复建卡；快照可能已过期或被处理，以动作详情为准。两笔需求有一笔不明确时两张卡都不创建；卡片没有真实支付或供应商交易。P2.6e 已修复 P2.6d 发现的高影响对话边界问题，旅客仍须逐张核对确认卡。
 
+### 从页面候选生成待确认卡
+
+登录 `/app` 后可在“对话助手”询问航班、酒店、租车，也可在“查询候选”填写地点和日期。每项候选都有“选择并生成待确认卡”；租车还须输入当地取车、还车时刻。选择后页面会切回对话区，在右侧或窄屏下方显示卡片。先查看对象、出发／入住／取还时间、参考总价、规则与有效期，再点击“确认”或“拒绝”。**选择候选只创建卡片；点击卡片中的最终确认按钮后才修改本人示例订单**。确认后到“我的行程”看有效安排；取消后的订单进入可展开的“订单历史”。查询页报错“候选条件、报价或可售状态已变化”时，重新查询并选择，不要根据旧页面金额继续确认。
+
+API 使用者可先通过对应 `GET /flights`、`GET /hotels` 或 `GET /rentals` 取得候选，再调用 `POST /api/v1/sessions/{id}/candidate-proposals`。例如航班请求体含 `kind=flight`、整数 `candidate_id`、所见 `unit_price` 与 `offer_version`、`departure`、`arrival` 和 `travel_date`；酒店含 `kind=hotel`、房型 `candidate_id`、所见每晚 `unit_price`、`city`、`check_in`、`check_out`，可附 `airport`；租车含 `kind=rental`、车辆 `candidate_id`、所见每日 `unit_price`、`airport` 或 `city`、`pickup_date`、`drop_off_date`，以及 `pickup_clock`、`dropoff_clock`，时刻格式为 `HH:MM`。服务端重新核对这些条件并返回卡片；鉴权、逐笔确认和拒绝仍沿用上文动作接口。`GET /api/v1/sessions/{id}/references` 返回最近已完成对话轮次的候选，供页面刷新恢复；只允许本人访问。
+
 ## 模型配置
 
 健康检查及正式查询/确认 API 无需模型密钥。`/turns` 需要编辑 Git 忽略的 `.env`，设置 `AI_PROVIDER=deepseek`、`AI_MODEL=deepseek-flash`、`AI_BASE_URL=https://api.deepseek.com`、`AI_API_KEY=<你的密钥>`；保存后重启 API，再按上一节通过 `/docs` 测试。不要在聊天、截图或 Git 提交中展示密钥。`AI_PROVIDER` 也允许 `gpt` 或 `local`；本地兼容服务可省略 API 密钥，但仍需模型名和地址。P2.6e 已通过受限真实 DeepSeek 定向复核；详情见《当前进度》。缺少模型配置时 `/turns` 返回 503，其他 API 仍可用。

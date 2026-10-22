@@ -337,7 +337,11 @@ class DialogueTests(unittest.TestCase):
             self.assertNotIn("9999", flight.json()["answer"])
             self.assertEqual(flight.json()["references"],
                              [{"type": "flight", "id": 1, "offer_version": 1,
-                               "price": 120, "travel_date": "2026-10-19"}])
+                               "price": 120, "travel_date": "2026-10-19",
+                               "departure": "HAM", "arrival": "BSL",
+                               "flight_no": "SIM-1",
+                               "departure_at": "2026-10-19T15:43:00",
+                               "arrival_at": "2026-10-19T17:20:00"}])
             hotel = self.turn(client, sid, auth, "hotel-001", "巴塞尔酒店")
             self.assertEqual(hotel.status_code, 200, hotel.text)
             self.assertIn("入住日期和退房日期", hotel.json()["answer"])

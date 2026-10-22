@@ -300,7 +300,12 @@ def read_for_assistant(db, traveler_id, intent, params):
                 references.append({"type": "flight", "id": row["id"],
                                    "offer_version": row["offer_version"],
                                    "price": row["demo_fare_amount"],
-                                   "travel_date": stamp.astimezone(ZoneInfo(zone)).date().isoformat()})
+                                   "travel_date": stamp.astimezone(ZoneInfo(zone)).date().isoformat(),
+                                   "departure": row["departure_airport"],
+                                   "arrival": row["arrival_airport"],
+                                   "flight_no": row["flight_no"],
+                                   "departure_at": row["departure_at"].isoformat(),
+                                   "arrival_at": row["arrival_at"].isoformat()})
             return {"answer": prefix + "；".join(
                 f"{_airport(db, row['departure_airport'])[0]} → {_airport(db, row['arrival_airport'])[0]}，"
                 f"航班 {row['flight_no']}（候选 {row['id']}，"
@@ -356,7 +361,11 @@ def read_for_assistant(db, traveler_id, intent, params):
                 f"当地出发 {_local_time(row['departure_at'], _airport(db, row['departure_airport'])[1])}，"
                 f"参考报价 {amount_zh(row['demo_fare_amount'])}）" for row in rows),
             [{"type": "flight", "id": row["id"], "offer_version": row["offer_version"],
-              "price": row["demo_fare_amount"], "travel_date": travel_date.isoformat()}
+              "price": row["demo_fare_amount"], "travel_date": travel_date.isoformat(),
+              "departure": row["departure_airport"], "arrival": row["arrival_airport"],
+              "flight_no": row["flight_no"],
+              "departure_at": row["departure_at"].isoformat(),
+              "arrival_at": row["arrival_at"].isoformat()}
              for row in rows],
         ) | {"flight_details": [_arrival_detail(db, row) for row in rows]}
 
@@ -450,7 +459,9 @@ def read_for_assistant(db, traveler_id, intent, params):
                 for row in shown),
             [{"type": "hotel_product", "id": row["product_id"],
               "price": row["nightly_price"], "distance_km": row.get("distance_km"),
-              "check_in": check_in.isoformat(), "check_out": check_out.isoformat()}
+              "check_in": check_in.isoformat(), "check_out": check_out.isoformat(),
+              "city": row["city"], "airport": airport,
+              "name": row["name"], "room_type": row["room_type"]}
              for row in shown]), "extreme_unique_id": unique_id}
 
     if intent == "rental_search":
@@ -509,7 +520,10 @@ def read_for_assistant(db, traveler_id, intent, params):
                 for row in shown) + "。" + next_step,
             [{"type": "rental_product", "id": row["id"],
               "price": row["daily_price"], "pickup_date": pickup.isoformat(),
-              "drop_off_date": dropoff.isoformat()} for row in shown]),
+              "drop_off_date": dropoff.isoformat(), "city": row["city"],
+              "airport": row["airport_code"], "name": row["name"],
+              "pickup_clock": params.get("pickup_clock"),
+              "dropoff_clock": params.get("dropoff_clock")} for row in shown]),
                 "extreme_unique_id": unique_id}
 
     if intent == "hotel_coverage":

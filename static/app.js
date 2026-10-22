@@ -213,15 +213,95 @@ function showReferences(references) {
   const labels = { flight: "航班", hotel_product: "酒店候选", rental_product: "租车候选",
     order: "本人订单", policy: "虚构规则", place_source: "地点来源", action: "待确认卡" };
   for (const ref of references) {
+    const complete = ref.type === "flight" ? ref.departure && ref.arrival && ref.travel_date :
+      ref.type === "hotel_product" ? ref.city && ref.check_in && ref.check_out :
+      ref.type === "rental_product" ? ref.airport && ref.pickup_date && ref.drop_off_date : false;
+    if (complete && ref.price !== undefined) {
+      box.append(candidateCard(ref)); continue;
+    }
     const id = ref.type === "action" && ref.id ? String(ref.id).slice(0, 8) : ref.id;
     const place = ref.display_name && ref.place && ref.display_name !== ref.place
       ? `${ref.display_name}（${ref.place}）` : (ref.display_name || ref.place);
     const parts = [labels[ref.type] || ref.type, place, ref.city ? cityName(ref.city) : null,
       id, ref.version ? `v${ref.version}` : null]
       .filter((part) => part !== null && part !== undefined && part !== "");
-    appendText(box, "span", "", parts.join(" · "));
+    appendText(box, "span", "", parts.join(" · ") +
+      (["flight", "hotel_product", "rental_product"].includes(ref.type)
+        ? " · 请重新查询以选择" : ""));
   }
   $("messages").append(box); $("messages").scrollTop = $("messages").scrollHeight;
+}
+function candidateCard(ref) {
+  const kind = ref.type === "hotel_product" ? "hotel" : ref.type === "rental_product" ? "rental" : "flight";
+  let title, lines, meta;
+  if (kind === "flight") {
+    title = `${airportName(ref.departure)} → ${airportName(ref.arrival)}`;
+    lines = [`出发 ${localAtAirport(ref.departure_at, ref.departure)}`,
+      `到达 ${localAtAirport(ref.arrival_at, ref.arrival)}`, `参考报价 ${money(ref.price)}`];
+    meta = `航班 ${ref.flight_no || `SIM-${ref.id}`} · ${ref.departure || "—"} → ${ref.arrival || "—"}`;
+  } else if (kind === "hotel") {
+    title = `${productName(ref.name)} · ${roomName(ref.room_type)}`;
+    const nights = (Date.parse(`${ref.check_out}T00:00:00Z`) - Date.parse(`${ref.check_in}T00:00:00Z`)) / 86400000;
+    lines = [`${cityName(ref.city)} · ${ref.check_in} 入住 → ${ref.check_out} 退房`,
+      `每晚 ${money(ref.price)} · ${nights} 晚参考总价 ${money(ref.price * nights)}`];
+    meta = `房型 ${ref.id}`;
+  } else {
+    title = productName(ref.name);
+    lines = [`${airportName(ref.airport)} · ${ref.pickup_date} 取车 → ${ref.drop_off_date} 还车`,
+      `每日 ${money(ref.price)} · 按实际取还时刻核算总价`];
+    meta = `车辆 ${ref.id}`;
+  }
+  const card = record(title, lines, meta);
+  card.classList.add("candidate-card");
+  const controls = el("div", "candidate-controls");
+  let pickup, dropoff;
+  if (kind === "rental") {
+    const pickupLabel = el("label", "time-field", "当地取车时刻");
+    pickup = el("input"); pickup.type = "time"; pickup.value = ref.pickup_clock || "";
+    pickupLabel.append(pickup);
+    const returnLabel = el("label", "time-field", "当地还车时刻");
+    dropoff = el("input"); dropoff.type = "time"; dropoff.value = ref.dropoff_clock || "";
+    returnLabel.append(dropoff); controls.append(pickupLabel, returnLabel);
+  }
+  const button = el("button", "secondary select-candidate", "选择并生成待确认卡");
+  button.type = "button";
+  button.disabled = !ref.id || (kind === "flight" && (!ref.departure || !ref.arrival || !ref.travel_date)) ||
+    (kind === "hotel" && (!ref.city || !ref.check_in || !ref.check_out));
+  button.addEventListener("click", () => chooseCandidate(ref, button, pickup?.value, dropoff?.value));
+  controls.append(button); card.append(controls);
+  return card;
+}
+async function chooseCandidate(ref, button, pickupClock, dropoffClock) {
+  if (ref.type === "rental_product" && (!pickupClock || !dropoffClock)) {
+    notice("请先填写取车和还车的当地时刻。", true); return;
+  }
+  button.disabled = true;
+  try {
+    if (!state.sessionId) {
+      const created = await request("/api/v1/sessions", { method: "POST", body: {} });
+      await loadSessions(created.id);
+    }
+    const selectedSession = state.sessionId;
+    const body = { kind: ref.type === "hotel_product" ? "hotel" :
+      ref.type === "rental_product" ? "rental" : "flight",
+      candidate_id: ref.id, unit_price: ref.price };
+    if (body.kind === "flight") Object.assign(body, { departure: ref.departure,
+      arrival: ref.arrival, travel_date: ref.travel_date, offer_version: ref.offer_version });
+    if (body.kind === "hotel") Object.assign(body, { city: ref.city,
+      airport: ref.airport || null, check_in: ref.check_in, check_out: ref.check_out });
+    if (body.kind === "rental") Object.assign(body, { airport: ref.airport,
+      city: ref.city || null, pickup_date: ref.pickup_date, drop_off_date: ref.drop_off_date,
+      pickup_clock: pickupClock, dropoff_clock: dropoffClock });
+    await request(`/api/v1/sessions/${encodeURIComponent(selectedSession)}/candidate-proposals`,
+      { method: "POST", body });
+    if (state.sessionId !== selectedSession) return;
+    await Promise.all([refreshActions(), refreshHistory()]);
+    setPanel("conversation");
+    notice("已生成待确认卡。请核对行程、时间、总价和政策；确认前订单不会改变。");
+  } catch (error) {
+    if (error.status === 409) notice("候选条件、报价或可售状态已变化，请重新查询后选择。", true);
+    else report(error);
+  } finally { button.disabled = false; }
 }
 function setPanel(id) {
   for (const button of document.querySelectorAll(".tab")) button.classList.toggle("active", button.dataset.panel === id);
@@ -302,7 +382,9 @@ async function selectSession(id) {
 }
 async function refreshMessages(id = state.sessionId, revision = state.sessionRevision) {
   if (!id) return;
-  const history = await request(`/api/v1/sessions/${encodeURIComponent(id)}`);
+  const [history, references] = await Promise.all([
+    request(`/api/v1/sessions/${encodeURIComponent(id)}`),
+    request(`/api/v1/sessions/${encodeURIComponent(id)}/references`)]);
   if (revision !== state.sessionRevision) return;
   const box = $("messages"); box.replaceChildren();
   if (!history.messages.length) { empty(box, "可以询问政策、推荐或提出预订需求。"); return; }
@@ -311,6 +393,7 @@ async function refreshMessages(id = state.sessionId, revision = state.sessionRev
     appendText(bubble, "small", "", message.role === "user" ? "我" : "旅行助手");
     appendText(bubble, "span", "", message.content); box.append(bubble);
   }
+  showReferences(references);
   box.scrollTop = box.scrollHeight;
 }
 async function refreshActions(id = state.sessionId, revision = state.sessionRevision) {
@@ -410,7 +493,6 @@ async function sendTurn(retry = false) {
     state.pendingTurn = null; notice(outcome.actions?.length ? `已生成 ${outcome.actions.length} 张待确认卡，请逐张核对。` : "答复已保存。");
     await Promise.all([refreshMessages(), refreshActions(), refreshHistory()]);
     await loadSessions(sessionId);
-    showReferences(outcome.references);
   } catch (error) {
     if (state.sessionId === sessionId && error.message !== "stale") {
       report(error);
@@ -475,21 +557,24 @@ async function search(kind, form) {
   const button = form.querySelector("button[type=submit]"); button.disabled = true;
   const box = $("search-results"); empty(box, "正在查询可用候选…");
   try {
-    const data = await request(`/api/v1/${kind}?${formQuery(form)}`);
+    const query = formQuery(form);
+    const data = await request(`/api/v1/${kind}?${query}`);
     box.replaceChildren();
     for (const item of data) {
-      if (kind === "flights") box.append(record(`${airportName(item.departure_airport)} → ${airportName(item.arrival_airport)}`,
-        [`当地出发 ${localAtAirport(item.departure_at, item.departure_airport)}`,
-          `当地到达 ${localAtAirport(item.arrival_at, item.arrival_airport)}`,
-          `参考报价 ${money(item.demo_fare_amount)}`],
-        `航班 ${item.flight_no} · ${item.departure_airport} → ${item.arrival_airport} · 候选 ${item.id} v${item.offer_version}`));
-      else if (kind === "hotels") box.append(record(`${productName(item.name)} · ${roomName(item.room_type)}`,
-        [`${cityName(item.city)} · 每晚 ${money(item.nightly_price)}`,
-          item.distance_km === null ? "" : `距机场约 ${item.distance_km} 公里（直线）`], `产品 ${item.product_id}`));
-      else box.append(record(productName(item.name),
-        [`${airportName(item.airport_code)} · 每日 ${money(item.daily_price)}`,
-          item.distance_km === null ? "" : `距机场约 ${item.distance_km} 公里（直线）`],
-        `机场 ${item.airport_code} · 产品 ${item.id}`));
+      const ref = kind === "flights" ? { type: "flight", id: item.id,
+        departure: item.departure_airport, arrival: item.arrival_airport,
+        departure_at: item.departure_at, arrival_at: item.arrival_at,
+        flight_no: item.flight_no, travel_date: query.get("travel_date"),
+        offer_version: item.offer_version, price: item.demo_fare_amount } :
+        kind === "hotels" ? { type: "hotel_product", id: item.product_id,
+          name: item.name, room_type: item.room_type, city: item.city,
+          airport: query.get("airport"),
+          check_in: query.get("check_in"), check_out: query.get("check_out"),
+          price: item.nightly_price } : { type: "rental_product", id: item.id,
+          name: item.name, city: item.city, airport: item.airport_code,
+          pickup_date: query.get("pickup_date"), drop_off_date: query.get("drop_off_date"),
+          price: item.daily_price };
+      box.append(candidateCard(ref));
     }
     if (!data.length) empty(box, "这个条件下没有可用候选，请调整日期或地点。");
   } catch (error) { empty(box, errorText(error)); report(error); }

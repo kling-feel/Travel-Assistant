@@ -157,6 +157,16 @@ dialog::backdrop{background:#173e3aac}
 .references{align-self:stretch;background:#f5f8f3;border:1px solid #e1eae1;border-radius:9px;padding:10px 12px;font-size:.74rem;color:#55776b}
 .references strong{display:block;margin-bottom:5px}
 .references span{display:inline-block;background:#fff;padding:4px 7px;border-radius:6px;margin:3px;overflow-wrap:anywhere}
+.candidate-card{border:1px solid #d3e4d7;background:#fff;box-shadow:0 10px 24px #143b2910}
+.references .candidate-card{margin-top:9px;padding:13px}
+.candidate-card h3{font-size:.98rem;color:#164d3e}
+.candidate-card .meta{font-size:.72rem}
+.candidate-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-top:14px;padding-top:12px;border-top:1px solid #e5ede7}
+.candidate-controls .time-field{display:grid;gap:5px;min-width:120px;font-size:.76rem;font-weight:700;color:#496b5b}
+.candidate-controls input[type=time]{min-height:41px;padding:8px;border:1px solid #cbded1;border-radius:9px;background:#fff;color:#173f35}
+.candidate-controls .select-candidate{min-height:42px;margin-left:auto}
+.candidate-controls :focus-visible{outline:3px solid #d59838;outline-offset:2px}
+.candidate-controls button:disabled{opacity:.55;cursor:not-allowed}
 
 .action-card{background:#fff;border:1px solid #dce8df;box-shadow:0 8px 24px #153d2410;padding:18px}
 
