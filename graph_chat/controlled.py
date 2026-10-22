@@ -4,6 +4,7 @@ import json
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import TypedDict
+from zoneinfo import ZoneInfo
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -68,6 +69,7 @@ class TurnState(TypedDict, total=False):
     task_contexts: dict
     location_context: dict
     nearby_city: str
+    nearby_source: str
     candidate_scopes: dict
     discovery_options: list[dict]
 
@@ -167,7 +169,8 @@ def build_graph(model, read_evidence, checkpointer):
         country_task = tasks.get("country_flight_search") or {}
         if claimed and country_task.get("origin") not in (None, claimed):
             tasks.pop("country_flight_search", None)
-        return {"location_context": location, "task_contexts": tasks}
+        return {"location_context": location, "task_contexts": tasks,
+                "nearby_city": None, "nearby_source": None}
 
     def route(state: TurnState):
         history = state["history"][-10:]
@@ -311,7 +314,8 @@ def build_graph(model, read_evidence, checkpointer):
                 tasks.pop("trip_discovery", None)
                 return {"intent": "flight_search", "params": flight,
                         "context": flight, "task_contexts": tasks, "draft": ""}
-        if re.search(r"你记得|还记得|前面说过什么|刚才聊了什么|我们聊过什么", user_text):
+        if re.search(r"你(?:还)?记得|还记得|(?:我们|咱们)?(?:前面|之前|刚才).{0,8}(?:说过|聊过).{0,3}(?:什么|哪些)|"
+                     r"(?:刚才|前面|之前).{0,6}聊到哪一步", user_text):
             return {"intent": "memory", "params": {}, "draft": ""}
         if (not writes and direct_intent == "flight_search" and flight_task
                 and direct_context.get("arrival") == flight_task.get("arrival")
@@ -337,9 +341,9 @@ def build_graph(model, read_evidence, checkpointer):
             if scope:
                 return {"intent": "policy", "params": {"scope": scope}, "draft": ""}
         landing = bool(re.search(r"落地|到达后|目的地", user_text))
-        nearby = "附近" in user_text or "周边" in user_text or landing
+        nearby = any(word in user_text for word in ("附近", "周边", "周围")) or landing
         lodging = bool(re.search(r"酒店|住宿|住哪|订房", user_text))
-        sight = bool(re.search(r"景点|经典地点|游览|好玩的地方", user_text))
+        sight = bool(re.search(r"景点|经典地点|游览|好玩的地方|好看的地方", user_text))
         if nearby and (lodging or sight) and not writes:
             explicit = mentioned_cities(user_text)
             current, destination = location.get("current_city"), location.get("destination_city")
@@ -393,7 +397,9 @@ def build_graph(model, read_evidence, checkpointer):
                         "请告诉我你现在所在的城市，或说明要查哪座目的地城市。"}
             if sight:
                 return {"intent": "recommendation", "params": {},
-                        "nearby_city": city, "draft": ""}
+                        "nearby_city": city,
+                        "nearby_source": ("self_report" if not explicit and city == current
+                                          else "explicit"), "draft": ""}
             hotel = {"intent": "hotel_search", "city": city}
             for key in ("check_in", "check_out", "nights"):
                 if key in direct_params:
@@ -465,7 +471,8 @@ def build_graph(model, read_evidence, checkpointer):
             return {"intent": "itinerary", "params": {},
                     "context": prior_context, "draft": ""}
         if (re.search(r"(?:现在|还有|最近|近期|接下来|未来).{0,12}(?:行程|安排|机票|航班|出发)|"
-                      r"(?:行程|机票|航班).{0,12}(?:还有|要出发|安排)", user_text)
+                      r"(?:行程|机票|航班).{0,12}(?:还有|要出发|安排)|"
+                      r"(?:明天|后天).{0,12}出发|怎么安排出发", user_text)
                 and not writes):
             return {"intent": "itinerary", "params": {},
                     "context": prior_context, "draft": ""}
@@ -590,12 +597,15 @@ def build_graph(model, read_evidence, checkpointer):
             model_name = settings.AI_MODEL.strip()
             detail = f"（模型标识：{model_name}）" if re.fullmatch(
                 r"[A-Za-z0-9._/-]{1,80}", model_name) else ""
-            return {"answer": f"当前旅行助手使用 {provider}{detail}。", "references": []}
+            return {"answer": (f"当前旅行助手使用 {provider}{detail}。"
+                               "这是服务配置标识，不能单凭它核实实际运行的底层精确版本。"),
+                    "references": []}
         return {"answer": _safe_general(state.get("draft")), "references": []}
 
     def memory(state: TurnState):
         """Recap only bounded user-stated task fields and current card status."""
-        task = (state.get("task_contexts") or {}).get("flight_search") or {}
+        tasks = state.get("task_contexts") or {}
+        task = tasks.get("flight_search") or {}
         location = state.get("location_context") or {}
         parts = []
         if location.get("current_city"):
@@ -624,12 +634,35 @@ def build_graph(model, read_evidence, checkpointer):
                 selected = (chosen or flights)[0]
                 detail += f"本任务最近查到航班 {selected['id']}，预订前仍会复核报价与可售状态。"
             parts.append(detail)
+        country = tasks.get("country_flight_search") or {}
+        if country.get("country_name"):
+            origin = country.get("origin")
+            parts.append(f"你还提出过从{city_zh(origin)}前往{country['country_name']}的航班需求。"
+                         if origin else f"你还提出过去{country['country_name']}的航班需求，尚缺出发城市。")
+        for kind, label, place in (("hotel_search", "酒店", "city"),
+                                   ("rental_search", "租车", "city")):
+            saved = tasks.get(kind) or {}
+            if saved.get(place):
+                parts.append(f"本会话还提过{city_zh(saved[place])}的{label}查询。")
         cards = read_evidence("memory_cards", {})
         pending = [{"type": "action", "id": card["id"], "status": "pending"}
                    for card in cards.get("cards", []) if card.get("status") == "pending"]
         if pending:
-            parts.append(f"此会话有 {len(pending)} 张待确认卡，请在页面逐张核对；"
-                         "如果你已更改行程条件，先放弃不再适用的旧卡。尚未确认的订单不会改变。")
+            action_names = {"flight_cancel": "机票取消", "hotel_cancel": "酒店取消",
+                            "rental_cancel": "租车取消", "flight_book": "机票预订",
+                            "hotel_book": "酒店预订", "rental_book": "租车预订",
+                            "flight_change": "机票改签", "hotel_change": "酒店改期",
+                            "rental_change": "租车改期"}
+            current = [card for card in cards["cards"] if card.get("status") == "pending"]
+            names = "、".join(action_names.get(card.get("action_type"), "订单操作")
+                             for card in current[:3])
+            soonest = min((card["expires_at"] for card in current
+                           if isinstance(card.get("expires_at"), datetime)), default=None)
+            expiry = (f"，最早一张在北京时间 {soonest.astimezone(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M')} 到期"
+                      if soonest else "")
+            parts.append(f"此会话有 {len(pending)} 张待确认卡（{names}{expiry}）。"
+                         "卡片仍待你逐张核对和确认；订单目前没有因这些卡改变。"
+                         "若行程条件已变，请放弃不再适用的卡。")
         return {"answer": " ".join(parts) if parts else
                 "本会话尚无可以核实的旅行计划。你可以告诉我出发地、目的地和日期。",
                 "references": pending[:10]}
@@ -638,7 +671,8 @@ def build_graph(model, read_evidence, checkpointer):
         def node(state: TurnState):
             params = state.get("params", {})
             if intent == "itinerary":
-                params = {**params, "_user_text": state["history"][-1]["content"]}
+                params = {**params, "_user_text": state["history"][-1]["content"],
+                          "_current_city": (state.get("location_context") or {}).get("current_city")}
             result = read_evidence(intent, params)
             if intent in ("flight_search", "hotel_search", "rental_search"):
                 groups = dict(state.get("candidates") or {})
@@ -779,9 +813,13 @@ def build_graph(model, read_evidence, checkpointer):
         params = dict(state.get("params", {}))
         params.pop("_resolved_city", None)
         text = state["history"][-1]["content"]
-        if ("附近" in text or "周边" in text) and state.get("nearby_city"):
+        if any(word in text for word in ("附近", "周边", "周围")) and state.get("nearby_city"):
             params["_resolved_city"] = state["nearby_city"]
-        return read_evidence("recommendation", {**params, "user_text": text})
+        result = read_evidence("recommendation", {**params, "user_text": text})
+        if state.get("nearby_source") == "self_report" and state.get("nearby_city"):
+            result["answer"] = (f"按你本会话自述在{city_zh(state['nearby_city'])}，"
+                                + result["answer"])
+        return result
 
     def trip_discovery(state: TurnState):
         task = dict((state.get("task_contexts") or {}).get("trip_discovery") or {})

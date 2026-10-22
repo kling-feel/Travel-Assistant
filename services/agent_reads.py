@@ -164,10 +164,12 @@ def read_for_assistant(db, traveler_id, intent, params):
     if intent == "itinerary":
         rows = itinerary(db, traveler_id)
         question = _as_text(params.get("_user_text"), 4000) or ""
+        current_city = _as_text(params.get("_current_city"))
         historical = any(word in question for word in ("历史", "取消过", "取消记录", "已取消的",
                                                         "以前的订单", "过去的订单"))
-        if not historical and any(word in question for word in ("现在", "还有", "要出发", "出发吗",
-                                              "最近", "近期", "接下来", "未来")):
+        if not historical and (any(word in question for word in ("现在", "还有", "要出发", "出发吗",
+                                                      "最近", "近期", "接下来", "未来"))
+                               or re.search(r"(?:明天|后天).{0,12}出发|怎么安排出发", question)):
             now = datetime.now(timezone.utc)
             flight_only_question = any(word in question for word in ("机票", "航班", "出发"))
             def after_now(stamp):
@@ -175,33 +177,52 @@ def read_for_assistant(db, traveler_id, intent, params):
             active = [item for item in rows["flight_orders"] if item["display_state"] == "active"
                       and after_now(item["departure_at"] if flight_only_question
                                     else item["arrival_at"])]
-            if not flight_only_question:
-                active_hotels = [item for item in rows["hotel_orders"] if item["display_state"] == "active"]
-                active_rentals = [item for item in rows["rental_orders"] if item["display_state"] == "active"]
-                details = ([f"机票 {item['flight_no']}，起飞 {_local_time(item['departure_at'], _airport(db, item['departure_airport'])[1])}"
-                            for item in active[:3]] +
-                           [f"酒店 {product_zh(item['name'], city=item['city'])}，{item['check_in']} 入住、{item['check_out']} 退房"
-                            for item in active_hotels[:3]] +
-                           [f"租车 {product_zh(item['name'], airport=item['airport_code'])}，取车 {_local_time(item['pickup_at'], item['airport_timezone'])}"
-                            for item in active_rentals[:3]])
-                answer = ("目前有效行程：" + "；".join(details) + "。") if details else "目前没有进行中或未来的已确认行程。"
-                references = [{"type": "order", "id": item["id"], "kind": kind,
-                               "version": item["version"], "status": item["status"]}
-                              for kind, items in (("flight_orders", active),
-                                                  ("hotel_orders", active_hotels),
-                                                  ("rental_orders", active_rentals))
-                              for item in items[:3]]
-                return _result(answer, references)
-            if not active:
-                return _result("目前没有未来待出发的已确认机票。")
-            details = "；".join(
-                f"{_airport(db, item['departure_airport'])[0]} → {_airport(db, item['arrival_airport'])[0]}，"
-                f"航班 {item['flight_no']}，起飞 {_local_time(item['departure_at'], _airport(db, item['departure_airport'])[1])}"
-                for item in active[:3])
-            return _result(f"目前有 {len(active)} 笔未来待出发的已确认机票：{details}。",
-                           [{"type": "order", "id": item["id"], "kind": "flight_orders",
-                             "version": item["version"], "status": item["status"]}
-                            for item in active[:3]])
+            hotel_rows = ([] if flight_only_question else
+                          [item for item in rows["hotel_orders"] if item["display_state"] == "active"])
+            rental_rows = ([] if flight_only_question else
+                           [item for item in rows["rental_orders"] if item["display_state"] == "active"])
+            summary = []
+            for item in active:
+                departure = _airport(db, item["departure_airport"])
+                arrival = _airport(db, item["arrival_airport"])
+                detail = (f"机票：{departure[0]} → {arrival[0]}（航班 {item['flight_no']}，"
+                          f"起飞 {_local_time(item['departure_at'], departure[1])}，"
+                          f"到达 {_local_time(item['arrival_at'], arrival[1])}，已确认）")
+                summary.append((item["departure_at"], detail, "flight_orders", item))
+            for item in hotel_rows:
+                zone = ZoneInfo(item["airport_timezone"] or "UTC")
+                started = datetime.combine(item["check_in"], time.min, zone)
+                detail = (f"酒店：{product_zh(item['name'], city=item['city'])} "
+                          f"{room_zh(item['room_type'])}（{item['check_in']} 入住、"
+                          f"{item['check_out']} 退房，已确认）")
+                summary.append((started, detail, "hotel_orders", item))
+            for item in rental_rows:
+                place = _airport(db, item["airport_code"])[0]
+                detail = (f"租车：{place} · {product_zh(item['name'], airport=item['airport_code'])}"
+                          f"（取车 {_local_time(item['pickup_at'], item['airport_timezone'])}、"
+                          f"还车 {_local_time(item['dropoff_at'], item['airport_timezone'])}，已确认）")
+                summary.append((item["pickup_at"], detail, "rental_orders", item))
+            summary.sort(key=lambda entry: (entry[0].replace(
+                tzinfo=entry[0].tzinfo or timezone.utc).astimezone(timezone.utc),
+                entry[2], entry[3]["id"]))
+            shown = summary[:6]
+            if not shown:
+                return _result("目前没有未来待出发的已确认机票。" if flight_only_question
+                               else "目前没有进行中或未来的已确认行程。")
+            remaining = len(summary) - len(shown)
+            answer = "目前有效行程：" + "；".join(entry[1] for entry in shown) + "。"
+            if remaining:
+                answer += f"另有 {remaining} 笔有效行程，可在“我的行程”页面查看。"
+            if current_city and re.search(r"出发|行程安排|旅行安排", question):
+                mismatched = next((item for item in active if
+                                   _airport(db, item["departure_airport"])[2] != current_city), None)
+                if mismatched:
+                    departure_city = city_zh(_airport(db, mismatched["departure_airport"])[2])
+                    answer += (f"你在本会话自述位于{city_zh(current_city)}，其中一班从"
+                               f"{departure_city}出发；请核对前往出发机场的安排。")
+            return _result(answer, [{"type": "order", "id": item["id"], "kind": kind,
+                                     "version": item["version"], "status": item["status"]}
+                                    for _, _, kind, item in shown])
         named = {kind for kind, words in (("flight_orders", "机票|航班|起飞"),
                                           ("hotel_orders", "酒店|住宿|入住|退房"),
                                           ("rental_orders", "租车|车辆|取车|还车"))

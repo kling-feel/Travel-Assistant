@@ -94,8 +94,10 @@ class StayPriceRentalTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""},
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
-                                            return_value=date(2026, 10, 21)), client:
+        with (model_patch, saver_patch,
+              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("api.travel.local_today", return_value=date(2026, 10, 21)),
+              patch("services.actions._hotel_today", return_value=date(2026, 10, 21)), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             for key, prompt in (("hotel-e2b-1", "查明天到后天上海的酒店"),
