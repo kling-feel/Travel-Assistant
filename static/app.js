@@ -181,6 +181,14 @@ function compactSnapshot(value, kind) {
   }
   return `${productName(value.product_name || "车辆")} · ${localClock(value.pickup_local || value.pickup_at)} 至 ${localClock(value.dropoff_local || value.dropoff_at)}${value.billable_days ? ` · 计费 ${value.billable_days} 日` : ""}`;
 }
+function actionSnapshot(card, when) {
+  const summary = compactSnapshot(card[when], card.action_type);
+  if (when === "after" && card.action_type.endsWith("_cancel") && card.after?.status === "cancelled") {
+    const outcome = card.status === "confirmed" ? "已取消 · 不再出行" : "拟取消 · 确认后不再出行";
+    return `${outcome} · ${summary}`;
+  }
+  return summary;
+}
 function cardSummary(card) {
   const price = card.price || {};
   const payableLabel = card.action_type.endsWith("_book") ? "参考总价" : "需补差价";
@@ -188,8 +196,8 @@ function cardSummary(card) {
     ["动作", actionNames[card.action_type] || card.action_type],
     ["状态", status(card.status)], ["动作 ID", card.id],
     ["原订单", card.target_order_id || "新订单"],
-    ["调整前", compactSnapshot(card.before, card.action_type)],
-    ["调整后", compactSnapshot(card.after, card.action_type)],
+    ["调整前", actionSnapshot(card, "before")],
+    ["调整后", actionSnapshot(card, "after")],
     ["原金额", money(price.old_amount)], ["新金额", money(price.new_amount)],
     ...(card.action_type.startsWith("rental_") && card.after?.daily_price
       ? [["每日单价", money(card.after.daily_price)]] : []),
@@ -408,8 +416,8 @@ async function refreshActions(id = state.sessionId, revision = state.sessionRevi
     appendText(item, "span", `status ${card.status}`, status(card.status));
     appendText(item, "p", "card-target", card.target_order_id ? "调整已有订单" : "新建订单");
     const change = el("div", "change-preview");
-    appendText(change, "small", "", "变更前"); appendText(change, "div", "", compactSnapshot(card.before, card.action_type));
-    appendText(change, "small", "", "变更后"); appendText(change, "div", "", compactSnapshot(card.after, card.action_type));
+    appendText(change, "small", "", "变更前"); appendText(change, "div", "", actionSnapshot(card, "before"));
+    appendText(change, "small", "", "变更后"); appendText(change, "div", "", actionSnapshot(card, "after"));
     item.append(change);
     const amount = el("div", "amount-preview");
     if (card.action_type.endsWith("_book")) {
