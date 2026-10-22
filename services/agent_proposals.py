@@ -56,7 +56,7 @@ def _explicit_id(text, kind, candidate_id):
     return isinstance(candidate_id, str) and len(candidate_id) > 5 and candidate_id in text
 
 
-def _product_choice(kind, proposed, groups, text):
+def _product_choice(kind, proposed, groups, text, grounded_context=None):
     candidates = _shown(groups, PRODUCT_TYPES[kind])
     if not candidates:
         if proposed is not None and _explicit_id(text, kind, proposed):
@@ -75,7 +75,10 @@ def _product_choice(kind, proposed, groups, text):
         if len(marked) != 1:
             raise SelectionNeeded("最高或最低价格的产品尚未唯一确定，请选择具体房型或车辆。")
         choice = marked[0]["id"]
-    elif kind == "flight" and "最早" in text:
+    elif kind == "flight" and ("最早" in text or
+                               isinstance(grounded_context, dict) and
+                               grounded_context.get("_country_selected") and
+                               grounded_context.get("_goal") == "book"):
         marked = [item for item in candidates if item.get("earliest_unique")]
         if len(marked) != 1:
             raise SelectionNeeded("最早出发班次尚未唯一确定，请重新查询并指定航班。")
@@ -240,7 +243,8 @@ def prepare_actions(db, traveler_id, plans, references, user_text,
             if action_type == "hotel_change" and params.get(key) is None:
                 params[key] = order["product_id"]
             else:
-                params[key] = _product_choice(kind, params.get(key), references, user_text)
+                params[key] = _product_choice(kind, params.get(key), references,
+                                              user_text, grounded_context)
             candidate = _compatible_candidate(kind, params[key], references, user_text, today)
             if kind == "hotel" and candidate:
                 for date_key in ("check_in", "check_out"):

@@ -156,6 +156,7 @@ def find_earliest_flights(session, departures, arrivals, *, not_before=None,
         return {"rows": [], "tie_count": 0, "last_day": last_day}
     eligible = (flights.c.arrival_airport.in_(arrivals),
                 flights.c.status == "Scheduled",
+                flight_offers.c.amount > 0,
                 flight_offers.c.rule_id.in_((OFFER_RULE_ID, NETWORK_OFFER_RULE_ID)),
                 or_(*scopes))
     query = (select(flights, flight_offers.c.amount.label("demo_fare_amount"),

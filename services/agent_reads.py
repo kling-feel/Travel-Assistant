@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from db.travel_models import airports, chat_turns, demo_state, flight_offers, flights, hotel_products, hotels
 from services.actions import ActionNotFound, _hotel_today, get_proposal
+from services.country_flights import find_country_flights
 from services.location_labels import airport_zh, amount_zh, city_zh, product_zh, room_zh
 from services.location_labels import CITY_ALIASES, EXTRA_CITY_ALIASES
 from services.weather_search import WeatherSearchError, search_weather
@@ -128,6 +129,12 @@ def read_action_guidance(db, traveler_id, session_id, mode):
 
 def read_for_assistant(db, traveler_id, intent, params):
     """Never accept owner, price, or policy content from model parameters."""
+    if intent == "country_flight_search":
+        return find_country_flights(
+            db, params.get("origin"), params.get("country_code"),
+            not_before=params.get("not_before"),
+            relative_offset=params.get("relative_offset"),
+            origin_source=params.get("origin_source"))
     if intent == "trip_discovery":
         origin = _as_text(params.get("origin"))
         travel_day = _as_date(params.get("travel_date"))

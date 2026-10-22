@@ -9,15 +9,18 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from services.dialogue_boundaries import boundary_intent
+from services.country_flights import country_in_text
 from services.dialogue_context import (declared_current_city, flight_followup, local_today,
                                        mentioned_cities, mentioned_dates,
                                        read_request, requested_actions,
                                        stay_nights)
 from services.location_labels import city_zh
+from services.recommendation_geography import country_for_fixture_city
 from config import settings
 
 
-INTENTS = ("general", "itinerary", "policy", "flight_search", "trip_discovery", "hotel_search",
+INTENTS = ("general", "itinerary", "policy", "flight_search", "country_flight_search",
+           "trip_discovery", "hotel_search",
            "rental_search", "transaction", "recommendation", "action_guidance",
            "weather", "capabilities", "hotel_coverage", "multi_read", "memory")
 ROUTER_PROMPT = """你是虚构旅行平台的主助手。只输出一个 JSON 对象，字段为 intent、params、answer。
@@ -160,7 +163,11 @@ def build_graph(model, read_evidence, checkpointer):
         claimed = declared_current_city(text)
         if claimed:
             location["current_city"] = claimed
-        return {"location_context": location}
+        tasks = dict(state.get("task_contexts") or {})
+        country_task = tasks.get("country_flight_search") or {}
+        if claimed and country_task.get("origin") not in (None, claimed):
+            tasks.pop("country_flight_search", None)
+        return {"location_context": location, "task_contexts": tasks}
 
     def route(state: TurnState):
         history = state["history"][-10:]
@@ -169,6 +176,7 @@ def build_graph(model, read_evidence, checkpointer):
         prior_context = state.get("context", {})
         tasks = dict(state.get("task_contexts") or {})
         flight_task = tasks.get("flight_search") or {}
+        country_task = tasks.get("country_flight_search") or {}
         location = state.get("location_context") or {}
         base = local_today()
         writes = requested_actions(user_text)
@@ -181,6 +189,81 @@ def build_graph(model, read_evidence, checkpointer):
         destination_open = bool(re.search(r"哪里|去哪|什么地方|一个地方|目的地|风景|景色|适合.{0,6}地方", user_text))
         flight_mentioned = bool(re.search(r"飞机|机票|航班|坐飞|飞过去|飞去|起飞", user_text))
         travel_mentioned = bool(re.search(r"旅游|旅行|推荐|风景|景色|去哪|好玩|好看", user_text))
+        requested_country = country_in_text(user_text)
+        explicit_origin = (declared_current_city(user_text) or
+                           (places[0] if places and re.search(r"从|由", user_text) else None))
+        if requested_country and (flight_mentioned or "flight_book" in writes or
+                                  country_task and re.search(r"改去|换成|改成", user_text)):
+            destination_cities = [city for city in places if city not in
+                                  {explicit_origin, location.get("current_city")}]
+            if not destination_cities:
+                name, code = requested_country
+                origin = explicit_origin or location.get("current_city")
+                relative = re.search(r"大后天|后天|明天|今天", user_text)
+                offsets = {"今天": 0, "明天": 1, "后天": 2, "大后天": 3}
+                dates = mentioned_dates(user_text, base)
+                country_task = {"origin": origin, "country_code": code,
+                                "country_name": name,
+                                "origin_source": ("explicit" if explicit_origin and
+                                                  re.search(r"从|由", user_text)
+                                                  else "self_report" if origin else None),
+                                "not_before": dates[0].isoformat() if dates and not relative else None,
+                                "relative_offset": offsets[relative.group()] if relative else None,
+                                "goal": "book" if "flight_book" in writes else "explore"}
+                tasks["country_flight_search"] = country_task
+                tasks.pop("flight_search", None)
+                if not origin:
+                    return {"intent": "general", "params": {}, "task_contexts": tasks,
+                            "draft": f"已记下你想去{name}。请告诉我从哪座城市出发，"
+                                     "我再列出实际可售的目的地城市。"}
+                return {"intent": "country_flight_search", "params": country_task,
+                        "task_contexts": tasks, "draft": ""}
+        if country_task and not country_task.get("origin") and location.get("current_city"):
+            country_task = {**country_task, "origin": location["current_city"],
+                            "origin_source": "self_report"}
+            tasks["country_flight_search"] = country_task
+            return {"intent": "country_flight_search", "params": country_task,
+                    "task_contexts": tasks, "draft": ""}
+        if country_task.get("options"):
+            option_cities = {item["city"] for item in country_task["options"]}
+            selected = next((city for city in places if city in option_cities or
+                             city != country_task.get("origin") and
+                             (country_for_fixture_city(city) or {}).get("code")
+                             == country_task.get("country_code")), None)
+            ordinal = re.search(r"第\s*([一二三四五12345])\s*(?:个|座|处)?(?:城市)?", user_text)
+            if selected is None and ordinal:
+                indices = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4,
+                           "1": 0, "2": 1, "3": 2, "4": 3, "5": 4}
+                index = indices[ordinal[1]]
+                selected = (country_task["options"][index]["city"]
+                            if index < len(country_task["options"]) else None)
+            if selected and re.search(r"选|去|到|订|预订|预定|查|就", user_text):
+                try:
+                    observed = datetime.fromisoformat(country_task["observed_at"])
+                except (KeyError, TypeError, ValueError):
+                    observed = None
+                if (observed is None or observed.tzinfo is None or
+                        not timedelta(0) <= datetime.now(timezone.utc) - observed <= timedelta(minutes=15)):
+                    tasks.pop("country_flight_search", None)
+                    return {"intent": "general", "params": {}, "task_contexts": tasks,
+                            "draft": "目的地城市列表已过期，请重新查询可售航班。"}
+                flight = {"intent": "flight_search", "departure": country_task["origin"],
+                          "arrival": selected, "sort": "earliest",
+                          "not_before": country_task.get("resolved_not_before"),
+                          "_goal": country_task.get("goal")}
+                tasks["flight_search"] = flight
+                tasks.pop("country_flight_search", None)
+                shown_option = next((item for item in country_task["options"]
+                                     if item["city"] == selected), None)
+                if flight["_goal"] == "book" and shown_option:
+                    return {"intent": "transaction", "params": {
+                        "actions": [{"action_type": "flight_book", "parameters": {}}],
+                        "queries": [{"intent": "flight_search", "params": flight}]},
+                        "context": {**flight, "_country_selected": True,
+                                    "_country_quote": shown_option},
+                        "task_contexts": tasks, "draft": ""}
+                return {"intent": "flight_search", "params": flight,
+                        "context": flight, "task_contexts": tasks, "draft": ""}
         start_discovery = destination_open and flight_mentioned and travel_mentioned and len(places) <= 1
         continuing_discovery = bool(discovery and not discovery.get("options") and
                                     (places or mentioned_dates(user_text, base)) and
@@ -648,6 +731,16 @@ def build_graph(model, read_evidence, checkpointer):
                                    query_params)
             answers.append(result["answer"])
             references.extend(result["references"])
+            quote = (state.get("context") or {}).get("_country_quote")
+            if query["intent"] == "flight_search" and quote:
+                fresh = next((item for item in result["references"]
+                              if item.get("id") == result.get("earliest_id")), None)
+                if (fresh is None or fresh.get("id") != quote.get("flight_id")
+                        or fresh.get("price") != quote.get("price")
+                        or fresh.get("offer_version") != quote.get("offer_version")):
+                    plans = [item for item in plans if not isinstance(item, dict)
+                             or item.get("action_type") != "flight_book"]
+                    answers.insert(0, "先前展示的最早班次或报价已变化；本轮不生成确认卡，请核对新结果后再次提出预订。")
             groups[query["intent"].split("_")[0]] = _scoped_candidates(
                 query["intent"], result["references"], query_params,
                 earliest_id=result.get("earliest_id"),
@@ -702,6 +795,16 @@ def build_graph(model, read_evidence, checkpointer):
         return {"answer": result["answer"], "references": result.get("references", []),
                 "discovery_options": task["options"], "task_contexts": tasks}
 
+    def country_flight_search(state: TurnState):
+        task = dict((state.get("task_contexts") or {}).get("country_flight_search") or {})
+        result = read_evidence("country_flight_search", task)
+        task["options"] = result.get("options", [])
+        task["resolved_not_before"] = result.get("not_before")
+        task["observed_at"] = datetime.now(timezone.utc).isoformat()
+        tasks = dict(state.get("task_contexts") or {})
+        tasks["country_flight_search"] = task
+        return {"answer": result["answer"], "references": [], "task_contexts": tasks}
+
     def multi_read(state: TurnState):
         params = state.get("params", {})
         flight_params = params.get("flight", {})
@@ -728,6 +831,7 @@ def build_graph(model, read_evidence, checkpointer):
     builder.add_node("transaction", transaction)
     builder.add_node("recommendation", recommendation)
     builder.add_node("trip_discovery", trip_discovery)
+    builder.add_node("country_flight_search", country_flight_search)
     builder.add_node("multi_read", multi_read)
     builder.add_node("action_guidance", lookup("action_guidance"))
     for intent in ("itinerary", "policy", "flight_search", "hotel_search", "rental_search",
