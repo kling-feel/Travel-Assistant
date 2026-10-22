@@ -17,7 +17,7 @@ from services.location_labels import city_zh
 from config import settings
 
 
-INTENTS = ("general", "itinerary", "policy", "flight_search", "hotel_search",
+INTENTS = ("general", "itinerary", "policy", "flight_search", "trip_discovery", "hotel_search",
            "rental_search", "transaction", "recommendation", "action_guidance",
            "weather", "capabilities", "hotel_coverage", "multi_read", "memory")
 ROUTER_PROMPT = """你是虚构旅行平台的主助手。只输出一个 JSON 对象，字段为 intent、params、answer。
@@ -66,6 +66,7 @@ class TurnState(TypedDict, total=False):
     location_context: dict
     nearby_city: str
     candidate_scopes: dict
+    discovery_options: list[dict]
 
 
 def _flight_scope(params):
@@ -175,6 +176,58 @@ def build_graph(model, read_evidence, checkpointer):
                        else prior_context)
         direct_intent, direct_params, direct_context = read_request(
             user_text, "general", {}, flight_seed, base)
+        discovery = dict(tasks.get("trip_discovery") or {})
+        places = mentioned_cities(user_text)
+        destination_open = bool(re.search(r"哪里|去哪|什么地方|一个地方|目的地|风景|景色|适合.{0,6}地方", user_text))
+        flight_mentioned = bool(re.search(r"飞机|机票|航班|坐飞|飞过去|飞去|起飞", user_text))
+        travel_mentioned = bool(re.search(r"旅游|旅行|推荐|风景|景色|去哪|好玩|好看", user_text))
+        start_discovery = destination_open and flight_mentioned and travel_mentioned and len(places) <= 1
+        continuing_discovery = bool(discovery and not discovery.get("options") and
+                                    (places or mentioned_dates(user_text, base)) and
+                                    not re.search(r"酒店|租车|政策|取消|改签|天气", user_text))
+        if start_discovery or continuing_discovery:
+            if start_discovery:
+                discovery = {"origin": location.get("current_city"),
+                             "preference": next((category for category, words in (
+                                 ("nature", ("自然", "风景", "景色", "公园", "山", "海边")),
+                                 ("history", ("历史", "古迹", "博物馆")),
+                                 ("culture", ("文化", "艺术")),
+                                 ("food", ("美食",))) if any(word in user_text for word in words)), None),
+                             "goal": "book" if "flight_book" in writes else "explore"}
+            if not discovery.get("origin"):
+                discovery["origin"] = (declared_current_city(user_text) or
+                                       (places[0] if places and re.search(r"从|由|出发", user_text)
+                                        else None))
+            dates = mentioned_dates(user_text, base)
+            if dates:
+                discovery["travel_date"] = dates[0].isoformat()
+            tasks["trip_discovery"] = discovery
+            if not discovery.get("origin"):
+                return {"intent": "general", "params": {}, "task_contexts": tasks,
+                        "draft": "请先告诉我你从哪座城市出发，我再查指定日期能到达的目的地。"}
+            if not discovery.get("travel_date"):
+                return {"intent": "general", "params": {}, "task_contexts": tasks,
+                        "draft": f"已记下从{city_zh(discovery['origin'])}出发。请告诉我出行日期。"}
+            return {"intent": "trip_discovery", "params": discovery,
+                    "task_contexts": tasks, "draft": ""}
+        if discovery.get("options"):
+            chosen = [item for item in discovery["options"] if item["city"] in places]
+            if not chosen and len(places) == 1 and places[0] != discovery.get("origin"):
+                chosen = [{"city": places[0]}]
+            ordinal = re.search(r"第\s*([一二三123])\s*(?:个|座|处)?", user_text)
+            if not chosen and ordinal:
+                index = {"一": 0, "二": 1, "三": 2, "1": 0, "2": 1, "3": 2}[ordinal[1]]
+                chosen = discovery["options"][index:index + 1]
+            if len(chosen) == 1 and (re.search(r"去|选|订|预订|预定|查|这个|那|就", user_text)
+                                     or len(user_text.strip()) <= 20 and bool(places)):
+                city = chosen[0]["city"]
+                flight = {"intent": "flight_search", "departure": discovery["origin"],
+                          "arrival": city, "travel_date": discovery["travel_date"],
+                          "_goal": discovery.get("goal")}
+                tasks["flight_search"] = flight
+                tasks.pop("trip_discovery", None)
+                return {"intent": "flight_search", "params": flight,
+                        "context": flight, "task_contexts": tasks, "draft": ""}
         if re.search(r"你记得|还记得|前面说过什么|刚才聊了什么|我们聊过什么", user_text):
             return {"intent": "memory", "params": {}, "draft": ""}
         if (not writes and direct_intent == "flight_search" and flight_task
@@ -637,6 +690,18 @@ def build_graph(model, read_evidence, checkpointer):
             params["_resolved_city"] = state["nearby_city"]
         return read_evidence("recommendation", {**params, "user_text": text})
 
+    def trip_discovery(state: TurnState):
+        task = dict((state.get("task_contexts") or {}).get("trip_discovery") or {})
+        result = read_evidence("trip_discovery", {**task,
+                                                  "_user_text": state["history"][-1]["content"]})
+        if result.get("travel_date"):
+            task["travel_date"] = result["travel_date"]
+        task["options"] = result.get("options", [])
+        tasks = dict(state.get("task_contexts") or {})
+        tasks["trip_discovery"] = task
+        return {"answer": result["answer"], "references": result.get("references", []),
+                "discovery_options": task["options"], "task_contexts": tasks}
+
     def multi_read(state: TurnState):
         params = state.get("params", {})
         flight_params = params.get("flight", {})
@@ -662,6 +727,7 @@ def build_graph(model, read_evidence, checkpointer):
     builder.add_node("memory", memory)
     builder.add_node("transaction", transaction)
     builder.add_node("recommendation", recommendation)
+    builder.add_node("trip_discovery", trip_discovery)
     builder.add_node("multi_read", multi_read)
     builder.add_node("action_guidance", lookup("action_guidance"))
     for intent in ("itinerary", "policy", "flight_search", "hotel_search", "rental_search",

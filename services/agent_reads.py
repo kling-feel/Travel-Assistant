@@ -13,6 +13,7 @@ from services.location_labels import airport_zh, amount_zh, city_zh, product_zh,
 from services.location_labels import CITY_ALIASES, EXTRA_CITY_ALIASES
 from services.weather_search import WeatherSearchError, search_weather
 from services.sessions import _owned_session
+from services.trip_discovery import discover_destinations
 from services.travel import (OrderError, find_earliest_flights, find_flights, find_hotels, find_rentals,
                              itinerary, policies)
 
@@ -127,6 +128,14 @@ def read_action_guidance(db, traveler_id, session_id, mode):
 
 def read_for_assistant(db, traveler_id, intent, params):
     """Never accept owner, price, or policy content from model parameters."""
+    if intent == "trip_discovery":
+        origin = _as_text(params.get("origin"))
+        travel_day = _as_date(params.get("travel_date"))
+        preference = params.get("preference")
+        if preference not in (None, "nature", "history", "culture", "food"):
+            preference = None
+        return discover_destinations(db, origin, travel_day, preference,
+                                     user_text=_as_text(params.get("_user_text"), 4000) or "")
     if intent == "landing_context":
         now = datetime.now(timezone.utc)
         orders = [item for item in itinerary(db, traveler_id)["flight_orders"]
