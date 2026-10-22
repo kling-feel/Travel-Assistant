@@ -1,13 +1,18 @@
 """P1 traveler API. Client input never selects a traveler account."""
 
+import asyncio
+import json
 import logging
 import re
+from threading import BoundedSemaphore
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal
 from uuid import UUID, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,7 +35,7 @@ from services.confirmations import confirm_action, reject_action, list_action_hi
 from services.agent_reads import demo_date, read_action_guidance, read_for_assistant
 from services.dialogue_context import local_today
 from services.chat_turns import (TurnConflict, _public as public_turn, begin_turn,
-                                 fail_turn, finish_turn, has_graph_turns,
+                                 fail_turn, finish_turn, get_turn, latest_turn, has_graph_turns,
                                  lock_processing_turn)
 from services.agent_proposals import SelectionNeeded, prepare_actions, verify_shown_quotes
 from services.agent_feedback import (bulk_cancellation_requested, cancellation_overview, explain_action_error,
@@ -47,6 +52,8 @@ from utils.password_hash import verify_password
 router = APIRouter()
 bearer = HTTPBearer()
 logger = logging.getLogger(__name__)
+turn_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="travel-turn")
+turn_slots = BoundedSemaphore(16)
 
 
 class _MemoryOnlyModel:
@@ -379,15 +386,19 @@ def add_user_message(session_id: str, data: UserMessage,
 def conversation_turn(session_id: str, data: TurnRequest,
                       traveler=Depends(current_traveler),
                       session: Session = Depends(get_db)):
+    return _process_turn(session_id, data, traveler["id"], session)
+
+
+def _process_turn(session_id, data, traveler_id, session, progress=None):
     try:
-        get_session_history(session, traveler["id"], session_id)
+        get_session_history(session, traveler_id, session_id)
     except SessionNotFound as error:
         raise HTTPException(404, str(error)) from error
     content = data.content.strip()
     if not content:
         raise HTTPException(422, "message cannot be blank")
     try:
-        turn, created = begin_turn(session, traveler["id"], session_id,
+        turn, created = begin_turn(session, traveler_id, session_id,
                                    data.request_key, content)
         if created:
             try:
@@ -400,6 +411,8 @@ def conversation_turn(session_id: str, data: TurnRequest,
         else:
             model = None
         session.commit()
+        if progress:
+            progress("accepted")
     except SessionNotFound as error:
         session.rollback()
         raise HTTPException(404, str(error)) from error
@@ -419,7 +432,7 @@ def conversation_turn(session_id: str, data: TurnRequest,
 
     try:
         history = [{"role": row["role"], "content": row["content"]}
-                   for row in get_session_history(session, traveler["id"],
+                   for row in get_session_history(session, traveler_id,
                                                   session_id)["messages"][-12:]]
         today = demo_date(session).isoformat()
         bind = session.get_bind()
@@ -428,16 +441,18 @@ def conversation_turn(session_id: str, data: TurnRequest,
         def read_evidence(intent, params):
             with Session(bind=bind) as read_db:
                 if intent == "action_guidance":
-                    return read_action_guidance(read_db, traveler["id"], session_id,
+                    return read_action_guidance(read_db, traveler_id, session_id,
                                                 params.get("mode"))
                 if intent == "memory_cards":
-                    return {"cards": list_proposals(read_db, traveler["id"], session_id)}
+                    return {"cards": list_proposals(read_db, traveler_id, session_id)}
                 if intent == "recommendation":
                     return read_recommendation(
-                        read_db, traveler["id"], params.get("user_text", ""),
+                        read_db, traveler_id, params.get("user_text", ""),
                         params, get_recommendation_provider())
-                return read_for_assistant(read_db, traveler["id"], intent, params)
+                return read_for_assistant(read_db, traveler_id, intent, params)
 
+        if progress:
+            progress("checking")
         with open_checkpointer() as saver:
             graph = build_graph(model, read_evidence, saver)
             result = graph.invoke(
@@ -465,11 +480,13 @@ def conversation_turn(session_id: str, data: TurnRequest,
         overview = ""
         if mass_cancel:
             with Session(bind=bind) as read_db:
-                overview, plans = cancellation_overview(read_db, traveler["id"], content)
+                overview, plans = cancellation_overview(read_db, traveler_id, content)
             answer, references = overview, []
+        if progress:
+            progress("verifying")
         if plans:
             try:
-                lock_processing_turn(session, traveler["id"], session_id, turn["id"])
+                lock_processing_turn(session, traveler_id, session_id, turn["id"])
                 candidates = result.get("candidates") or {}
                 flight_task = (result.get("task_contexts") or {}).get("flight_search") or {}
                 if not candidates.get("flight") and any(
@@ -481,7 +498,7 @@ def conversation_turn(session_id: str, data: TurnRequest,
                         raise SelectionNeeded("本会话尚未查询过该航班，请先查询并核对班次。")
                 shown = [sum((list(items) for items in candidates.values()
                               if isinstance(items, list)), [])] if isinstance(candidates, dict) else []
-                resolved = prepare_actions(session, traveler["id"], plans,
+                resolved = prepare_actions(session, traveler_id, plans,
                                            shown, content, content, local_today(),
                                            result.get("context"), bulk_cancel=mass_cancel)
                 verify_shown_quotes(session, resolved, shown)
@@ -489,7 +506,7 @@ def conversation_turn(session_id: str, data: TurnRequest,
                 for index, (action_type, parameters) in enumerate(resolved):
                     key = str(uuid5(UUID(turn["id"]), str(index)))
                     card = create_proposal(
-                        session, traveler["id"], session_id, action_type,
+                        session, traveler_id, session_id, action_type,
                         parameters, idempotency_key=key, reuse_pending=True,
                     )
                     reused_count += card["id"] != key
@@ -515,10 +532,10 @@ def conversation_turn(session_id: str, data: TurnRequest,
                 actions = []
                 if isinstance(error, SelectionNeeded):
                     with Session(bind=bind) as read_db:
-                        answer = explain_selection_needed(read_db, traveler["id"], plans, error)
+                        answer = explain_selection_needed(read_db, traveler_id, plans, error)
                 else:
                     with Session(bind=bind) as read_db:
-                        answer = explain_action_error(read_db, traveler["id"], plans, error)
+                        answer = explain_action_error(read_db, traveler_id, plans, error)
                 if overview:
                     answer = (overview + "\n" + answer)[:4000]
                 elif result.get("params", {}).get("queries"):
@@ -534,11 +551,12 @@ def conversation_turn(session_id: str, data: TurnRequest,
             except Exception as error:
                 logger.warning("dialogue_presentation_fallback reason=%s",
                                type(error).__name__)
-        outcome = finish_turn(session, traveler["id"], session_id, turn["id"],
+        outcome = finish_turn(session, traveler_id, session_id, turn["id"],
                               answer, references, actions)
         session.commit()
         return outcome
     except Exception as error:
+        logger.warning("dialogue_turn_failed reason=%s", type(error).__name__)
         session.rollback()
         try:
             fail_turn(session, session_id, turn["id"], "turn_failed")
@@ -546,6 +564,123 @@ def conversation_turn(session_id: str, data: TurnRequest,
         except Exception:
             session.rollback()
         raise HTTPException(503, "conversation turn failed") from error
+
+
+def _turn_event(name, payload):
+    return f"event: {name}\ndata: {json.dumps({'v': 1, **payload}, ensure_ascii=False)}\n\n"
+
+
+@router.get("/sessions/{session_id}/turns/status/latest")
+def latest_turn_status(session_id: str, traveler=Depends(current_traveler),
+                       session: Session = Depends(get_db)):
+    try:
+        return latest_turn(session, traveler["id"], session_id)
+    except SessionNotFound as error:
+        raise HTTPException(404, str(error)) from error
+
+
+@router.get("/sessions/{session_id}/turns/{request_key}")
+def turn_status(session_id: str, request_key: str,
+                traveler=Depends(current_traveler),
+                session: Session = Depends(get_db)):
+    if not 8 <= len(request_key) <= 80 or not re.fullmatch(r"[A-Za-z0-9._-]+", request_key):
+        raise HTTPException(422, "invalid request key")
+    try:
+        outcome = get_turn(session, traveler["id"], session_id, request_key)
+    except SessionNotFound as error:
+        raise HTTPException(404, str(error)) from error
+    if outcome is None:
+        raise HTTPException(404, "turn not found")
+    return outcome
+
+
+@router.post("/sessions/{session_id}/turns/stream")
+def conversation_turn_stream(session_id: str, data: TurnRequest,
+                             traveler=Depends(current_traveler),
+                             session: Session = Depends(get_db)):
+    """Stream honest stages, then only the committed, verified answer."""
+    try:
+        get_session_history(session, traveler["id"], session_id)
+    except SessionNotFound as error:
+        raise HTTPException(404, str(error)) from error
+    if not data.content.strip():
+        raise HTTPException(422, "message cannot be blank")
+    bind = session.get_bind()
+    traveler_id = traveler["id"]
+    session.rollback()
+
+    async def events():
+        loop = asyncio.get_running_loop()
+        queue = asyncio.Queue()
+
+        if not turn_slots.acquire(blocking=False):
+            yield _turn_event("failed", {"code": "busy", "status": 503,
+                                         "request_key": data.request_key})
+            return
+
+        def send(name, payload):
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, (name, payload))
+            except RuntimeError:
+                pass  # client loop closed; the worker still persists its turn
+
+        def work():
+            try:
+                with Session(bind=bind) as work_db:
+                    outcome = _process_turn(
+                        session_id, data, traveler_id, work_db,
+                        progress=lambda stage: send(
+                            "accepted" if stage == "accepted" else "progress",
+                            {"stage": stage, "request_key": data.request_key}),
+                    )
+                send("result", outcome)
+            except HTTPException as error:
+                code = ("processing" if error.status_code == 409 else
+                        "not_found" if error.status_code == 404 else
+                        "invalid_input" if error.status_code == 422 else
+                        "unavailable")
+                send("failed", {"code": code, "status": error.status_code,
+                                "request_key": data.request_key})
+            except Exception as error:
+                logger.warning("stream_turn_failed reason=%s", type(error).__name__)
+                send("failed", {"code": "unavailable", "status": 503,
+                                "request_key": data.request_key})
+            finally:
+                turn_slots.release()
+
+        try:
+            loop.run_in_executor(turn_executor, work)
+        except RuntimeError:
+            turn_slots.release()
+            yield _turn_event("failed", {"code": "busy", "status": 503,
+                                         "request_key": data.request_key})
+            return
+        yield _turn_event("progress", {"stage": "received", "request_key": data.request_key})
+        while True:
+            try:
+                name, payload = await asyncio.wait_for(queue.get(), timeout=12)
+            except asyncio.TimeoutError:
+                yield ": keep-alive\n\n"
+                continue
+            if name == "result":
+                answer = payload["answer"] or ""
+                for start in range(0, len(answer), 96):
+                    yield _turn_event("delta", {"text": answer[start:start + 96]})
+                    await asyncio.sleep(0)
+                yield _turn_event("completed", {
+                    "request_key": data.request_key, "status": payload["status"],
+                    "action_count": len(payload["actions"]),
+                })
+                return
+            yield _turn_event(name, payload)
+            if name == "failed":
+                return
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+        "X-Content-Type-Options": "nosniff",
+    })
 
 
 @router.get("/sessions/{session_id}/actions")

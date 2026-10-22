@@ -2,7 +2,8 @@
 
 const $ = (id) => document.getElementById(id);
 const state = { token: null, generation: 0, controllers: new Set(), sessionId: null,
-  sessionRevision: 0, sending: false, pendingTurn: null, busyAction: false, dialogAction: null,
+  sessionRevision: 0, sending: false, pendingTurn: null, turnController: null,
+  busyAction: false, dialogAction: null,
   locations: [], airports: new Map(), cities: new Map(), airportInputs: new Map(), cityInputs: new Map() };
 const actionNames = { flight_book: "预订机票", flight_change: "改签机票", flight_cancel: "取消机票",
   hotel_book: "预订酒店", hotel_change: "修改酒店", hotel_cancel: "取消酒店",
@@ -75,7 +76,7 @@ function logout(message = "") {
   state.generation++;
   for (const controller of state.controllers) controller.abort();
   state.controllers.clear(); state.token = null; state.sessionId = null;
-  state.sessionRevision++; state.pendingTurn = null; state.sending = false;
+  state.sessionRevision++; state.pendingTurn = null; state.sending = false; state.turnController = null;
   state.dialogAction = null; state.busyAction = false;
   state.locations = []; state.airports.clear(); state.cities.clear();
   state.airportInputs.clear(); state.cityInputs.clear();
@@ -89,6 +90,7 @@ function logout(message = "") {
   $("active-trip-count").textContent = ""; $("historical-trip-count").textContent = "";
   $("itinerary-history").open = false; $("history-list").replaceChildren();
   $("search-results").replaceChildren(); $("login-message").textContent = message;
+  $("turn-status").textContent = "";
   $("username").focus();
 }
 function report(error) { const message = errorText(error); if (message && error.status !== 401) notice(message, true); }
@@ -378,23 +380,40 @@ async function loadSessions(preferred = null) {
   await selectSession(preferred && sessions.some((item) => item.id === preferred) ? preferred : sessions[0].id);
 }
 async function selectSession(id) {
+  if (state.turnController) state.turnController.abort();
   state.sessionId = id; state.sessionRevision++;
   const revision = state.sessionRevision;
-  state.pendingTurn = null; $("retry-turn").hidden = true;
+  state.pendingTurn = null; state.sending = false; $("send-button").disabled = false;
+  $("turn-status").textContent = "";
+  $("retry-turn").hidden = true;
   for (const button of $("session-list").querySelectorAll(".session-item"))
     button.classList.toggle("active", button.textContent.includes(String(id || "").slice(0, 8)) && !!id);
   $("session-label").textContent = id ? `会话 ${id.slice(0, 8)}` : "选择或新建会话";
   if (!id) { empty($("messages"), "新建会话后开始对话。"); empty($("action-list"), "暂无动作"); return; }
-  try { await Promise.all([refreshMessages(id, revision), refreshActions(id, revision)]); }
+  try {
+    await Promise.all([refreshMessages(id, revision, true), refreshActions(id, revision)]);
+    await refreshTurnRecovery(id, revision);
+  }
   catch (error) { report(error); }
 }
-async function refreshMessages(id = state.sessionId, revision = state.sessionRevision) {
+async function refreshTurnRecovery(id, revision) {
+  const latest = await request(`/api/v1/sessions/${encodeURIComponent(id)}/turns/status/latest`);
+  if (revision !== state.sessionRevision || state.sending) return;
+  if (latest && (latest.status === "processing" || latest.status === "failed")) {
+    state.pendingTurn = { sessionId: id, requestKey: latest.request_key, content: latest.content };
+    $("retry-turn").textContent = latest.status === "processing" ? "核对本轮" : "重试本轮";
+    $("retry-turn").hidden = false;
+    if (latest.status === "processing") notice("上一轮仍在处理，可稍后核对结果。");
+    else notice("上一轮未完成，可以用原请求重试。", true);
+  }
+}
+async function refreshMessages(id = state.sessionId, revision = state.sessionRevision, forceBottom = false) {
   if (!id) return;
   const [history, references] = await Promise.all([
     request(`/api/v1/sessions/${encodeURIComponent(id)}`),
     request(`/api/v1/sessions/${encodeURIComponent(id)}/references`)]);
   if (revision !== state.sessionRevision) return;
-  const box = $("messages"); box.replaceChildren();
+  const box = $("messages"), follow = forceBottom || nearBottom(box); box.replaceChildren();
   if (!history.messages.length) { empty(box, "可以询问政策、推荐或提出预订需求。"); return; }
   for (const message of history.messages) {
     const bubble = el("div", `bubble ${message.role === "user" ? "user" : "assistant"}`);
@@ -402,7 +421,7 @@ async function refreshMessages(id = state.sessionId, revision = state.sessionRev
     appendText(bubble, "span", "", message.content); box.append(bubble);
   }
   showReferences(references);
-  box.scrollTop = box.scrollHeight;
+  if (follow) box.scrollTop = box.scrollHeight;
 }
 async function refreshActions(id = state.sessionId, revision = state.sessionRevision) {
   if (!id) return;
@@ -483,6 +502,81 @@ async function submitAction() {
     }
   } finally { state.busyAction = false; $("dialog-submit").disabled = false; state.dialogAction = null; }
 }
+function nearBottom(box) { return box.scrollHeight - box.scrollTop - box.clientHeight < 100; }
+function addChatBubble(role, content = "") {
+  const box = $("messages"), follow = nearBottom(box);
+  if (box.querySelector(":scope > .empty, :scope > .subtle")) box.replaceChildren();
+  const bubble = el("div", `bubble ${role}`);
+  appendText(bubble, "small", "", role === "user" ? "我" : "旅行助手");
+  const body = appendText(bubble, "span", "bubble-body", content);
+  box.append(bubble);
+  if (follow) box.scrollTop = box.scrollHeight;
+  return { bubble, body };
+}
+function streamError(status, code = "") {
+  const error = new Error(code || `HTTP ${status}`); error.status = status; return error;
+}
+async function streamTurn(turn, revision, onEvent) {
+  const generation = state.generation, controller = new AbortController();
+  state.controllers.add(controller); state.turnController = controller;
+  const timeout = setTimeout(() => controller.abort(), 70000);
+  try {
+    const response = await fetch(`/api/v1/sessions/${encodeURIComponent(turn.sessionId)}/turns/stream`, {
+      method: "POST", cache: "no-store", credentials: "omit", signal: controller.signal,
+      headers: { Accept: "text/event-stream", "Content-Type": "application/json",
+        Authorization: `Bearer ${state.token}` },
+      body: JSON.stringify({ content: turn.content, request_key: turn.requestKey }),
+    });
+    if (revision !== state.sessionRevision || generation !== state.generation) throw new Error("stale");
+    if (!response.ok) {
+      if (response.status === 401) logout("登录已失效，请重新登录。");
+      throw streamError(response.status);
+    }
+    if (!response.body) throw new Error("stream unavailable");
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    let buffer = "", completed = null;
+    const consume = async (frame) => {
+      let kind = "message"; const lines = [];
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event:")) kind = line.slice(6).trim();
+        if (line.startsWith("data:")) lines.push(line.slice(5).trimStart());
+      }
+      if (!lines.length) return;
+      let data;
+      try { data = JSON.parse(lines.join("\n")); } catch { throw new Error("invalid stream event"); }
+      if (data.v !== 1) throw new Error("invalid stream version");
+      if (kind === "failed") throw streamError(data.status || 503, data.code);
+      if (!["progress", "accepted", "delta", "completed"].includes(kind)) throw new Error("invalid stream event");
+      if (revision !== state.sessionRevision || generation !== state.generation) throw new Error("stale");
+      await onEvent(kind, data);
+      if (kind === "completed") completed = data;
+    };
+    while (!completed) {
+      const { value, done } = await reader.read();
+      buffer = (buffer + decoder.decode(value || new Uint8Array(), { stream: !done })).replace(/\r\n/g, "\n");
+      let boundary;
+      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
+        await consume(frame);
+        if (completed) break;
+      }
+      if (done) break;
+    }
+    if (!completed) throw new Error("stream ended before completion");
+    return completed;
+  } catch (error) {
+    if (revision !== state.sessionRevision || generation !== state.generation) throw new Error("stale");
+    if (error.name === "AbortError") throw new Error("timeout");
+    throw error;
+  } finally {
+    clearTimeout(timeout); state.controllers.delete(controller);
+    if (state.turnController === controller) state.turnController = null;
+  }
+}
+async function turnStatus(turn) {
+  try { return await request(`/api/v1/sessions/${encodeURIComponent(turn.sessionId)}/turns/${encodeURIComponent(turn.requestKey)}`); }
+  catch (error) { if (error.status === 404) return null; throw error; }
+}
 async function sendTurn(retry = false) {
   if (state.sending) return;
   if (!state.sessionId) { notice("请先新建或选择会话。", true); return; }
@@ -491,24 +585,89 @@ async function sendTurn(retry = false) {
   const sessionId = state.sessionId;
   const turn = retry && state.pendingTurn?.sessionId === sessionId ? state.pendingTurn :
     { sessionId, content, requestKey: crypto.randomUUID() };
+  const revision = state.sessionRevision;
   state.pendingTurn = turn; state.sending = true; $("send-button").disabled = true;
-  $("retry-turn").hidden = true; notice("正在处理这一轮对话…");
-  try {
-    const outcome = await request(`/api/v1/sessions/${encodeURIComponent(sessionId)}/turns`,
-      { method: "POST", body: { content: turn.content, request_key: turn.requestKey }, turn: true });
-    if (state.sessionId !== sessionId) return;
-    if (!retry) $("chat-input").value = "";
-    state.pendingTurn = null; notice(outcome.actions?.length ? `已生成 ${outcome.actions.length} 张待确认卡，请逐张核对。` : "答复已保存。");
-    await Promise.all([refreshMessages(), refreshActions(), refreshHistory()]);
-    await loadSessions(sessionId);
-  } catch (error) {
-    if (state.sessionId === sessionId && error.message !== "stale") {
-      report(error);
-      if (error.message === "timeout" || error.status === 409) $("retry-turn").hidden = false;
-      else state.pendingTurn = null;
-      try { await Promise.all([refreshMessages(), refreshActions()]); } catch { /* Keep the original error. */ }
+  $("retry-turn").hidden = true;
+  let persisted = null;
+  if (retry) {
+    try {
+      const saved = await turnStatus(turn); persisted = saved;
+      if (revision !== state.sessionRevision) return;
+      if (saved?.status === "completed") {
+        state.pendingTurn = null;
+        await Promise.all([refreshMessages(sessionId, revision), refreshActions(sessionId, revision)]);
+        notice("本轮答复已恢复。");
+        state.sending = false; $("send-button").disabled = false; return;
+      }
+      if (saved?.status === "processing") {
+        notice("本轮仍在处理，稍后可再次核对。");
+        $("retry-turn").textContent = "核对本轮"; $("retry-turn").hidden = false;
+        state.sending = false; $("send-button").disabled = false; return;
+      }
+    } catch (error) {
+      if (revision !== state.sessionRevision) return;
+      report(error); state.sending = false; $("send-button").disabled = false; return;
     }
-  } finally { state.sending = false; $("send-button").disabled = false; }
+  }
+  if (!retry || $("chat-input").value.trim() === content) $("chat-input").value = "";
+  if (!retry || !persisted) addChatBubble("user", content);
+  const assistant = addChatBubble("assistant", "已收到消息，正在开始处理…");
+  assistant.bubble.classList.add("pending");
+  $("turn-status").textContent = "消息已发送，助手正在处理。";
+  const elapsed = appendText(assistant.bubble, "small", "elapsed", "已等待 0 秒");
+  elapsed.setAttribute("aria-hidden", "true");
+  const started = performance.now();
+  const tick = setInterval(() => { if (revision === state.sessionRevision)
+    elapsed.textContent = `已等待 ${Math.floor((performance.now() - started) / 1000)} 秒`; }, 1000);
+  let hasDelta = false;
+  notice("正在处理这一轮对话…");
+  try {
+    const outcome = await streamTurn(turn, revision, async (kind, data) => {
+      if (kind === "progress" || kind === "accepted") {
+        const labels = { received: "已收到消息，正在开始处理…", accepted: "已保存提问，正在处理…",
+          checking: "正在查询和整理资料…", verifying: "正在核对答复与订单条件…" };
+        assistant.body.textContent = labels[data.stage] || "正在处理…";
+        $("turn-status").textContent = assistant.body.textContent;
+      } else if (kind === "delta") {
+        if (typeof data.text !== "string") throw new Error("invalid answer chunk");
+        if (!hasDelta) {
+          assistant.body.textContent = ""; assistant.bubble.classList.remove("pending"); hasDelta = true;
+          $("turn-status").textContent = "答复已核对，正在显示。";
+        }
+        const follow = nearBottom($("messages"));
+        assistant.body.textContent += data.text;
+        if (follow) $("messages").scrollTop = $("messages").scrollHeight;
+        if (!document.hidden) await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+    });
+    if (revision !== state.sessionRevision) return;
+    state.pendingTurn = null;
+    $("turn-status").textContent = "答复已完成。";
+    notice(outcome.action_count ? `已生成 ${outcome.action_count} 张待确认卡，请逐张核对。` : "答复已保存。");
+    await Promise.all([refreshMessages(sessionId, revision), refreshActions(sessionId, revision), refreshHistory()]);
+  } catch (error) {
+    if (revision === state.sessionRevision && error.message !== "stale") {
+      $("turn-status").textContent = "本轮未能完成显示，请核对或重试。";
+      report(error);
+      try {
+        const saved = await turnStatus(turn);
+        if (revision !== state.sessionRevision) return;
+        if (saved?.status === "completed") {
+          state.pendingTurn = null; notice("本轮答复已保存，已从会话恢复。");
+        } else {
+          $("retry-turn").textContent = saved?.status === "processing" ? "核对本轮" : "重试本轮";
+          $("retry-turn").hidden = false;
+          if (!saved && !retry) $("chat-input").value = turn.content;
+        }
+      } catch { $("retry-turn").hidden = false; }
+      try { await Promise.all([refreshMessages(sessionId, revision), refreshActions(sessionId, revision)]); }
+      catch { /* Keep the original error. */ }
+    }
+  } finally {
+    clearInterval(tick);
+    assistant.bubble.classList.remove("pending");
+    if (revision === state.sessionRevision) { state.sending = false; $("send-button").disabled = false; }
+  }
 }
 function record(title, lines, meta = "") {
   const item = el("article", "record"); appendText(item, "h3", "", title);

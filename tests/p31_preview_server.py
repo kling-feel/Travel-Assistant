@@ -5,6 +5,7 @@ Run only for local page checks. It binds to loopback and never uses paid APIs.
 
 import json
 import os
+import time as clock
 from contextlib import nullcontext
 from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import patch
@@ -32,6 +33,9 @@ class FixedModel:
         self.tomorrow = tomorrow
 
     def invoke(self, messages):
+        delay_ms = int(os.getenv("P31_PREVIEW_DELAY_MS", "0"))
+        if delay_ms:
+            clock.sleep(min(delay_ms, 15000) / 1000)
         day = self.tomorrow.isoformat()
         next_day = (self.tomorrow + timedelta(days=1)).isoformat()
         decision = {"intent": "transaction", "params": {
@@ -125,4 +129,5 @@ if __name__ == "__main__":
         model = patch("api.travel.get_chat_model",
                       side_effect=ModelUnavailable("preview model disabled"))
     with model, saver:
-        uvicorn.run(preview, host="127.0.0.1", port=8001)
+        uvicorn.run(preview, host="127.0.0.1",
+                    port=int(os.getenv("P31_PREVIEW_PORT", "8001")))

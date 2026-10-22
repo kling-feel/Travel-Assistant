@@ -61,11 +61,15 @@ h3{font-size:1.05rem}
 .chat-head strong{color:#183d32;font-size:.95rem}
 .chat-head small{display:block;margin:3px 0 0 17px}
 .live-dot{display:inline-block;width:8px;height:8px;background:#53b58e;border-radius:50%;margin-right:8px}
-.messages{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:15px}
-.bubble{max-width:88%;padding:13px 16px;border-radius:15px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
-.bubble.user{align-self:flex-end;background:#176b58;color:#fff;border-bottom-right-radius:4px}
-.bubble.assistant{align-self:flex-start;background:#f0f5f0;color:#264c3f;border-bottom-left-radius:4px}
+.messages{flex:1;overflow:auto;padding:24px 22px;display:flex;flex-direction:column;gap:18px}
+.bubble{max-width:88%;min-width:0;padding:14px 17px;border-radius:17px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;box-shadow:0 7px 22px #173d2d0b}
+.bubble.user{align-self:flex-end;background:linear-gradient(135deg,#207761,#125e4e);color:#fff;border-bottom-right-radius:5px}
+.bubble.assistant{align-self:flex-start;background:#f2f7f2;color:#264c3f;border:1px solid #e2ece3;border-bottom-left-radius:5px}
 .bubble small{display:block;opacity:.66;font-size:.67rem;margin-bottom:3px}
+.bubble.pending{background:linear-gradient(110deg,#f4f8f1,#edf5ee);border-color:#d6e6d9;box-shadow:0 9px 26px #173d2d10}
+.bubble.pending .bubble-body::after{content:"";display:inline-block;width:7px;height:7px;margin-left:9px;border-radius:50%;background:#52a583;box-shadow:12px 0 #94c6a9,24px 0 #c4dcc8;vertical-align:middle;animation:thinking-pulse 1.2s ease-in-out infinite}
+.bubble .elapsed{margin:9px 0 0;font-size:.65rem;color:#728f7d;font-variant-numeric:tabular-nums}
+@keyframes thinking-pulse{50%{opacity:.45;transform:translateY(-2px)}}
 .empty{color:#8ca49a;text-align:center;margin:auto;font-size:.9rem}
 .composer{border-top:1px solid #e7eee8;padding:13px}
 .composer textarea{resize:vertical;border:0;background:#f5f8f5;min-height:65px}
@@ -209,4 +213,7 @@ dialog .field-details dl{background:#f7faf7;border-radius:9px;padding:12px}
   .dialog-card dl{grid-template-columns:1fr;gap:3px}
   .dialog-card dd{margin-bottom:9px}
   .dialog-card dt{font-size:.7rem}
+  .messages{padding:18px 12px;gap:13px}
+  .bubble{max-width:94%;padding:12px 13px}
 }
+@media(prefers-reduced-motion:reduce){.bubble.pending .bubble-body::after{animation:none}}
