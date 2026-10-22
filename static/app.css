@@ -93,6 +93,26 @@ h3{font-size:1.05rem}
 .result-list .record h3{color:#173f35;font-size:1.06rem;line-height:1.45}
 .record .meta{font-size:.73rem;color:#81988c;padding-top:9px;border-top:1px solid #eef2ed;margin-top:13px;word-break:break-word}
 .record strong{color:#146e58}
+.journey-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:25px;padding-bottom:11px;border-bottom:1px solid #dfe9e1}
+.journey-heading h3{margin:0;color:#173f35;font-size:1.15rem}
+.journey-heading p{margin:5px 0 0;color:#718b7e;font-size:.78rem}
+.journey-count{font-size:.76rem;font-weight:800;color:#24735c;background:#e9f5ed;border-radius:999px;padding:5px 11px;white-space:nowrap}
+.journey-list{margin-top:15px}
+.journey-card{border-left:4px solid #31846b!important}
+.journey-card.cancelled{background:#f3f4f2!important;border-color:#cbd2cb!important;border-left-color:#77857b!important;box-shadow:none!important}
+.journey-card.finished{background:#faf8f3!important;border-color:#e2dacb!important;border-left-color:#af9370!important;box-shadow:none!important}
+.journey-card.cancelled h3,.journey-card.finished h3{color:#52645b!important}
+.journey-badge{display:inline-flex;align-items:center;gap:6px;font-size:.7rem;font-weight:800;border-radius:999px;padding:5px 10px;margin-bottom:12px}
+.journey-badge.active{color:#165c49;background:#e3f3e9}
+.journey-badge.cancelled{color:#415248;background:#e1e7e0}
+.journey-badge.cancelled::before{content:"×";font-size:.9rem;line-height:1}
+.journey-badge.finished{color:#765d3d;background:#f2eadb}
+.journey-history{margin-top:30px;border:1px solid #dfe8df;background:#fafcf9;border-radius:14px;padding:15px 19px}
+.journey-history summary{cursor:pointer;color:#365e4e;font-weight:800;list-style-position:inside}
+.journey-history summary span{font-size:.74rem;color:#758d7e;font-weight:600;margin-left:6px}
+.journey-history>.subtle{margin:15px 0 0}
+.action-card .status.pending{background:#fff3d9;color:#79500e}
+.action-card .status.confirmed{background:#e4f1e8;color:#1e6650}
 dialog{border:0;border-radius:20px;padding:0;max-width:610px;width:calc(100% - 32px);box-shadow:0 25px 90px #0d312c55}
 dialog::backdrop{background:#173e3aac}
 .dialog-card{padding:28px;background:#fff;max-height:85vh;overflow:auto}

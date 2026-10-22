@@ -124,11 +124,11 @@ class NaturalDialogueTests(unittest.TestCase):
             result = read_for_assistant(db, "t1", "itinerary",
                                         {"_user_text": "我现在还有要出发的行程吗"})
             self.assertIn("没有未来待出发的已确认机票", result["answer"])
-            self.assertIn("已取消", result["answer"])
+            self.assertNotIn("已取消", result["answer"])
             current = read_for_assistant(db, "t1", "itinerary",
                                          {"_user_text": "我现在有什么行程"})
             self.assertIn("目前没有进行中或未来的已确认行程", current["answer"])
-            self.assertIn("已取消订单", current["answer"])
+            self.assertNotIn("已取消", current["answer"])
 
     def test_combined_read_asks_only_missing_hotel_dates_then_resumes(self):
         model = dialogue_cases.ScriptedModel()

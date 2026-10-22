@@ -17,6 +17,7 @@ from db.travel_models import (airports, demo_state, flight_offers, flight_orders
 from services.city_products import HOTEL_LAST_CHECKOUT_OFFSET
 from services.policy_catalog import CURRENT_POLICIES
 from services.demo_pricing import NETWORK_OFFER_RULE_ID, OFFER_RULE_ID
+from services.itinerary_state import display_state
 
 
 class OrderError(ValueError):
@@ -38,9 +39,10 @@ def itinerary(session, traveler_id):
         select(hotel_orders.c.id, hotel_orders.c.status, hotel_orders.c.version,
                hotel_orders.c.product_id, hotel_orders.c.check_in, hotel_orders.c.check_out,
                hotel_orders.c.total_price, hotels.c.name, hotels.c.city,
-               hotel_products.c.room_type)
+               hotel_products.c.room_type, airports.c.timezone.label("airport_timezone"))
         .join(hotel_products, hotel_orders.c.product_id == hotel_products.c.id)
         .join(hotels, hotel_products.c.hotel_id == hotels.c.id)
+        .outerjoin(airports, airports.c.code == hotels.c.nearby_airport)
         .where(hotel_orders.c.traveler_id == traveler_id)
         .order_by(hotel_orders.c.check_in)
     ).mappings().all()
@@ -67,9 +69,14 @@ def itinerary(session, traveler_id):
         item["pickup_local"] = pickup.astimezone(zone).isoformat()
         item["dropoff_local"] = dropoff.astimezone(zone).isoformat()
         item["simulation_notice"] = "虚构租车与模拟金额；没有真实付款或退款"
+        item["display_state"] = display_state("rental", item)
         rentals.append(item)
-    return {"flight_orders": [dict(row) for row in flight_rows],
-            "hotel_orders": [dict(row) for row in hotel_rows],
+    flight_items, hotel_items = [dict(row) for row in flight_rows], [dict(row) for row in hotel_rows]
+    for kind, items in (("flight", flight_items), ("hotel", hotel_items)):
+        for item in items:
+            item["display_state"] = display_state(kind, item)
+    return {"flight_orders": flight_items,
+            "hotel_orders": hotel_items,
             "rental_orders": rentals}
 
 

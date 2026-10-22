@@ -534,14 +534,15 @@ class DialogueTests(unittest.TestCase):
             self.assertIn("Basel Minster", explicit.json()["answer"])
             self.assertEqual(provider.calls[0], ("Basel", "architecture", "CH"))
             inferred = self.turn(client, sid_one, one, "place-own", "给我推荐行程里的景点")
-            self.assertIn("已确认的 巴塞尔 行程", inferred.json()["answer"])
+            self.assertNotIn("已确认的 巴塞尔 行程", inferred.json()["answer"])
+            self.assertIn("请指定目的地城市", inferred.json()["answer"])
             unknown = self.turn(client, sid_one, one, "place-unknown", "推荐伊斯坦布尔景点")
             self.assertIn("无法核对本轮目的地", unknown.json()["answer"])
             self.assertEqual(unknown.json()["references"], [])
             other = self.turn(client, sid_two, two, "place-other", "给我推荐行程里的景点")
             self.assertIn("请明确城市或机场名称", other.json()["answer"])
             self.assertNotIn("已确认的 Basel 行程", other.json()["answer"])
-            self.assertEqual(len(provider.calls), 2)
+            self.assertEqual(len(provider.calls), 1)
 
     def test_unreachable_and_missing_evidence_do_not_fabricate(self):
         provider = FixedPlaceProvider(error=TimeoutError("test timeout"))

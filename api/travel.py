@@ -31,7 +31,7 @@ from services.chat_turns import (TurnConflict, _public as public_turn, begin_tur
                                  fail_turn, finish_turn, has_graph_turns,
                                  lock_processing_turn)
 from services.agent_proposals import SelectionNeeded, prepare_actions, verify_shown_quotes
-from services.agent_feedback import (cancellation_overview, explain_action_error,
+from services.agent_feedback import (bulk_cancellation_requested, cancellation_overview, explain_action_error,
                                      explain_selection_needed)
 from services.checkpoints import open_checkpointer
 from services.model_config import ModelUnavailable, get_chat_model
@@ -342,12 +342,11 @@ def conversation_turn(session_id: str, data: TurnRequest,
                     sorted(key for key in ("departure", "arrival", "travel_date",
                                            "not_before", "sort") if flight_task.get(key)),
                     len((result.get("candidates") or {}).get("flight") or []))
-        mass_cancel = ("取消" in content and bool(re.search(r"所有|全部", content))
-                       and "机票" in content and "酒店" in content)
+        mass_cancel = bulk_cancellation_requested(content)
         overview = ""
         if mass_cancel:
             with Session(bind=bind) as read_db:
-                overview, plans = cancellation_overview(read_db, traveler["id"])
+                overview, plans = cancellation_overview(read_db, traveler["id"], content)
             answer, references = overview, []
         if plans:
             try:
@@ -365,7 +364,7 @@ def conversation_turn(session_id: str, data: TurnRequest,
                               if isinstance(items, list)), [])] if isinstance(candidates, dict) else []
                 resolved = prepare_actions(session, traveler["id"], plans,
                                            shown, content, content, local_today(),
-                                           result.get("context"))
+                                           result.get("context"), bulk_cancel=mass_cancel)
                 verify_shown_quotes(session, resolved, shown)
                 reused_count = 0
                 for index, (action_type, parameters) in enumerate(resolved):

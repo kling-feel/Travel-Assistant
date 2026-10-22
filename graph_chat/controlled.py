@@ -325,6 +325,9 @@ def build_graph(model, read_evidence, checkpointer):
         if not writes and direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
             return {"intent": direct_intent, "params": direct_params,
                     "context": direct_context, "draft": ""}
+        if re.search(r"历史订单|订单历史|行程历史|历史行程|取消过|取消记录|已取消的", user_text) and not writes:
+            return {"intent": "itinerary", "params": {},
+                    "context": prior_context, "draft": ""}
         if (re.search(r"(?:现在|还有|最近|近期|接下来|未来).{0,12}(?:行程|安排|机票|航班|出发)|"
                       r"(?:行程|机票|航班).{0,12}(?:还有|要出发|安排)", user_text)
                 and not writes):
@@ -354,7 +357,7 @@ def build_graph(model, read_evidence, checkpointer):
             return {"intent": "general", "params": {}, "draft":
                     "抱歉，刚才没有解释清楚。" + clarification}
         if re.search(r"起飞时间|航班时间|退房时间|入住时间", user_text) or (
-                "时间" in user_text and "我的行程" in previous):
+                "时间" in user_text and ("我的行程" in previous or "我的有效行程" in previous)):
             return {"intent": "itinerary", "params": {}, "draft": ""}
         if re.search(r"(?:中国|日本|美国|法国|英国|瑞士|韩国|加拿大|意大利|阿联酋).{0,15}(?:旅游|旅行|推荐|去哪)", user_text):
             return {"intent": "recommendation", "params": direct_params,

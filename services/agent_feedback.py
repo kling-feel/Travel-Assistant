@@ -8,6 +8,8 @@ from sqlalchemy import select
 
 from db.travel_models import airports, flight_orders, flights, hotel_orders
 from services.actions import _hotel_today
+from services.dialogue_context import mentioned_cities
+from services.location_labels import city_zh
 from services.travel import itinerary
 
 
@@ -97,35 +99,86 @@ def explain_selection_needed(db, traveler_id, plans, error):
     return reason[:300]
 
 
-def cancellation_overview(db, traveler_id):
-    """Enumerate a request for all owned flight and hotel cancellations."""
+def bulk_cancellation_requested(text):
+    """Only explicit bulk commands may enter the deterministic cancel overview."""
+    return ("取消" in text
+            and not re.search(r"政策|规则|怎么|如何|费用|取消过|已取消|不(?:要|想|用)?取消|"
+                              r"(?:能|可以).{0,12}取消.{0,12}吗", text)
+            and bool(re.search(r"所有|全部|全都|都取消|取消其他|取消其余|取消剩余", text))
+            and bool(re.search(r"机票|航班|酒店|住宿|租车|车辆|行程|安排|其他|其余|剩余", text)))
+
+
+def cancellation_overview(db, traveler_id, text=None):
+    """Scope a bulk request to owned active orders, with explicit preserved items."""
     rows = itinerary(db, traveler_id)
     now = datetime.now(timezone.utc)
-    lines, eligible = [], []
-    for order in rows["flight_orders"]:
-        if order["status"] != "confirmed":
+    text = text or "取消所有机票和酒店"
+    preserved = re.search(r"(?:除了|除)(.{1,30}?)(?:以外|之外)|保留(.{1,30}?)(?:[，,；;]|，?取消|不取消)", text)
+    preserved_text = next((part for part in preserved.groups() if part), "") if preserved else ""
+    places = mentioned_cities(preserved_text)
+    if preserved and len(places) != 1:
+        return "请明确说出要保留的一座城市；我会先核对各订单，再逐笔提出取消。", []
+    keep_city = places[0] if places else None
+    if keep_city and len(keep_city) == 3 and keep_city.isupper():
+        keep_city = db.execute(select(airports.c.city).where(
+            airports.c.code == keep_city)).scalar_one_or_none()
+    if preserved and not keep_city:
+        return "无法核对要保留的城市，请说明城市名称。", []
+    named = {kind for kind, words in (("flight", "机票|航班"), ("hotel", "酒店|住宿"),
+                                      ("rental", "租车|车辆")) if re.search(words, text)}
+    kinds = named or {"flight", "hotel", "rental"}
+    if keep_city and re.search(r"其他|其余|剩余|以外.*都取消", text):
+        kinds = {"flight", "hotel", "rental"}
+    airport_city = dict(db.execute(select(airports.c.code, airports.c.city)).all())
+    lines, eligible, retained, ambiguous = [], [], [], []
+    for kind, label in (("flight", "机票"), ("hotel", "酒店"), ("rental", "租车")):
+        if kind not in kinds:
             continue
-        detail = _flight_detail(db, order)
-        if _utc(order["departure_at"]) <= now:
-            lines.append(f"机票订单 {order['id']}：{detail}已过起飞时间，不能取消。")
-        else:
-            lines.append(f"机票订单 {order['id']}：{detail}可申请取消，需逐笔确认。")
-            eligible.append({"action_type": "flight_cancel",
-                             "parameters": {"order_id": order["id"]}})
-    for order in rows["hotel_orders"]:
-        if order["status"] != "confirmed":
-            continue
-        if order["check_in"] <= _hotel_today(db, order["product_id"], now):
-            lines.append(f"酒店订单 {order['id']}：{order['check_in']} 入住，已过取消截止日期。")
-        else:
-            lines.append(f"酒店订单 {order['id']}：{order['check_in']} 入住，可申请取消，需逐笔确认。")
-            eligible.append({"action_type": "hotel_cancel",
-                             "parameters": {"order_id": order["id"]}})
-    if not lines:
-        return "你目前没有已确认的机票或酒店订单可供核对。", []
-    hidden = max(len(lines) - 12, 0)
-    if hidden:
-        lines = [*lines[:12], f"另有 {hidden} 笔订单未在本轮展开；请指定订单号继续核对。"]
-    tail = ("本轮最多生成两张待确认卡；其他可办理订单请下一轮单独提出。"
-            if len(eligible) > 2 else "订单尚未改变；可办理的项目仍须逐张确认。")
-    return "\n".join([*lines, tail]), eligible[:2]
+        for order in rows[f"{kind}_orders"]:
+            if order["status"] != "confirmed":
+                continue
+            identity = f"{label}订单 {order['id']}"
+            if kind == "flight":
+                detail = _flight_detail(db, order)
+                destination = airport_city.get(order["arrival_airport"])
+                departure = airport_city.get(order["departure_airport"])
+                if keep_city and destination == keep_city:
+                    retained.append(f"{identity}：目的地为{city_zh(keep_city)}，保留。")
+                    continue
+                if keep_city and departure == keep_city:
+                    ambiguous.append(f"{identity}：从{city_zh(keep_city)}出发，是否也保留？")
+                    continue
+                eligible_now = _utc(order["departure_at"]) > now
+                detail = f"{detail}{'可申请取消' if eligible_now else '已过起飞时间，不能取消'}"
+            elif kind == "hotel":
+                if keep_city and order["city"] == keep_city:
+                    retained.append(f"{identity}：位于{city_zh(keep_city)}，保留。")
+                    continue
+                eligible_now = order["check_in"] > _hotel_today(db, order["product_id"], now)
+                detail = f"{order['check_in']} 入住，{'可申请取消' if eligible_now else '已过取消截止日期'}"
+            else:
+                if keep_city and airport_city.get(order["airport_code"]) == keep_city:
+                    retained.append(f"{identity}：在{city_zh(keep_city)}取车，保留。")
+                    continue
+                eligible_now = _utc(order["pickup_at"]) > now
+                detail = f"{order['pickup_local']} 取车，{'可申请取消' if eligible_now else '已过取车时间，不能取消'}"
+            if eligible_now:
+                eligible.append({"action_type": f"{kind}_cancel",
+                                 "parameters": {"order_id": order["id"]}})
+            lines.append(f"{identity}：{detail}{'，需逐笔确认' if eligible_now else ''}。")
+    if ambiguous:
+        return "\n".join([*retained, *ambiguous, "请先确认这些跨城订单的去留；目前没有生成取消卡。"]), []
+    if not lines and not retained:
+        return "你目前没有符合这次范围的已确认订单可供核对。", []
+    if len(lines) + len(retained) > 35 or sum(map(len, [*lines, *retained])) > 3000:
+        return "符合范围的订单较多，请缩小到机票、酒店或租车，并指定日期；本轮没有生成卡。", []
+    selected = eligible[:2]
+    selected_ids = [item["parameters"]["order_id"] for item in selected]
+    remaining = [item["parameters"]["order_id"] for item in eligible[2:]]
+    if remaining:
+        tail = ("本轮仅为 " + "、".join(selected_ids) + " 生成待确认卡；"
+                "尚未生成卡的订单：" + "、".join(remaining) +
+                "。这些订单不会自动继续办理；如仍要取消，请下一轮明确提出。")
+    else:
+        tail = "订单尚未改变；本轮可办理的项目仍须逐张确认。"
+    return "\n".join([*retained, *lines, tail]), selected

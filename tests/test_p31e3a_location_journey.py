@@ -275,7 +275,7 @@ class LocationJourneyTests(unittest.TestCase):
             recent = self.fixture.turn(client, sid, auth, "recent-01",
                                        "我最近有什么行程安排吗")
             self.assertIn("没有进行中或未来", recent.json()["answer"])
-            self.assertIn("2 笔已取消", recent.json()["answer"])
+            self.assertNotIn("已取消", recent.json()["answer"])
             history = self.fixture.turn(client, sid, auth, "recent-02",
                                         "我的所有订单历史是什么")
             self.assertEqual(history.status_code, 200, history.text)

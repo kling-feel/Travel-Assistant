@@ -118,9 +118,9 @@ class StayPriceRentalTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
         with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
-                                            return_value=date(2026, 10, 21)), patch(
+                                            return_value=date(2026, 10, 22)), patch(
                                                 "api.travel.local_today",
-                                                return_value=date(2026, 10, 21)), client:
+                                                return_value=date(2026, 10, 22)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             first = self.fixture.turn(client, sid, auth, "rental-e2b-1",
@@ -148,7 +148,7 @@ class StayPriceRentalTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
         with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
-                                            return_value=date(2026, 10, 21)), client:
+                                            return_value=date(2026, 10, 22)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             for key, prompt in (("rental-split-1", "我在上海租车，明天取大后天还"),

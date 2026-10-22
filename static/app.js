@@ -85,7 +85,9 @@ function logout(message = "") {
   $("identity").textContent = ""; $("password").value = ""; $("chat-input").value = "";
   $("retry-turn").hidden = true; $("session-list").replaceChildren();
   $("messages").replaceChildren(); $("action-list").replaceChildren();
-  $("itinerary-list").replaceChildren(); $("history-list").replaceChildren();
+  $("itinerary-list").replaceChildren(); $("itinerary-history-list").replaceChildren();
+  $("active-trip-count").textContent = ""; $("historical-trip-count").textContent = "";
+  $("itinerary-history").open = false; $("history-list").replaceChildren();
   $("search-results").replaceChildren(); $("login-message").textContent = message;
   $("username").focus();
 }
@@ -426,18 +428,35 @@ function record(title, lines, meta = "") {
 }
 async function refreshItinerary() {
   const data = await request("/api/v1/me/itinerary");
-  const box = $("itinerary-list"); box.replaceChildren();
-  for (const item of data.flight_orders || []) box.append(record(`${airportName(item.departure_airport)} → ${airportName(item.arrival_airport)}`,
+  const active = $("itinerary-list"), history = $("itinerary-history-list");
+  active.replaceChildren(); history.replaceChildren();
+  let activeCount = 0, historicalCount = 0;
+  const add = (item, title, lines, meta) => {
+    const kind = item.display_state === "cancelled" ? "cancelled" :
+      item.display_state === "finished" ? "finished" : "active";
+    const label = kind === "cancelled" ? "已取消 · 不再出行" :
+      kind === "finished" ? "已结束" : "已确认 · 有效行程";
+    const card = record(title, lines, meta);
+    card.classList.add("journey-card", kind);
+    const badge = el("span", `journey-badge ${kind}`, label);
+    card.insertBefore(badge, card.firstChild);
+    if (kind === "active") { active.append(card); activeCount++; }
+    else { history.append(card); historicalCount++; }
+  };
+  for (const item of data.flight_orders || []) add(item, `${airportName(item.departure_airport)} → ${airportName(item.arrival_airport)}`,
     [`当地出发 ${localAtAirport(item.departure_at, item.departure_airport)}`, `当地到达 ${localAtAirport(item.arrival_at, item.arrival_airport)}`,
-      `状态 ${status(item.status)} · 票价 ${money(item.amount)}`],
-    `航班 ${item.flight_no} · ${item.departure_airport} → ${item.arrival_airport} · 订单 ${item.id} v${item.version}`));
-  for (const item of data.hotel_orders || []) box.append(record(productName(item.name),
+      `机票 · 票价 ${money(item.amount)}`],
+    `航班 ${item.flight_no} · ${item.departure_airport} → ${item.arrival_airport} · 订单 ${item.id} v${item.version}`);
+  for (const item of data.hotel_orders || []) add(item, productName(item.name),
     [`${cityName(item.city)} · ${roomName(item.room_type)}`, `${item.check_in} 入住 → ${item.check_out} 退房`,
-      `状态 ${status(item.status)} · 总价 ${money(item.total_price)}`], `订单 ${item.id} v${item.version}`));
-  for (const item of data.rental_orders || []) box.append(record(productName(item.name),
+      `酒店 · 总价 ${money(item.total_price)}`], `订单 ${item.id} v${item.version}`);
+  for (const item of data.rental_orders || []) add(item, productName(item.name),
     [`${airportName(item.airport_code)} · 当地取车 ${local(item.pickup_local)}`, `当地还车 ${local(item.dropoff_local)}`,
-      `状态 ${status(item.status)} · 总价 ${money(item.total_price)}`], `机场 ${item.airport_code} · 订单 ${item.id} v${item.version}`));
-  if (!box.children.length) empty(box, "当前账号还没有行程订单。");
+      `租车 · 总价 ${money(item.total_price)}`], `机场 ${item.airport_code} · 订单 ${item.id} v${item.version}`);
+  $("active-trip-count").textContent = `${activeCount} 项`;
+  $("historical-trip-count").textContent = `${historicalCount} 项`;
+  if (!activeCount) empty(active, "目前没有进行中或未来的已确认行程。");
+  if (!historicalCount) empty(history, "暂无已结束或已取消订单。");
 }
 async function refreshHistory() {
   const data = await request("/api/v1/me/action-history");

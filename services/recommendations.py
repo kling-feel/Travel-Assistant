@@ -381,14 +381,15 @@ def reachable_cities(db) -> list[str]:
     return sorted(db.execute(query).scalars().all(), key=str.casefold)
 
 
-def _owned_destinations(db, traveler_id: str, as_of: date) -> list[str]:
+def _owned_destinations(db, traveler_id: str) -> list[str]:
+    now = datetime.now(timezone.utc)
     flight_cities = db.execute(
         select(airports.c.city)
         .join(flights, flights.c.arrival_airport == airports.c.code)
         .join(flight_orders, flight_orders.c.flight_id == flights.c.id)
         .where(flight_orders.c.traveler_id == traveler_id,
                flight_orders.c.status == "confirmed",
-               flights.c.arrival_at >= datetime.combine(as_of, datetime.min.time(), timezone.utc))
+               flights.c.arrival_at > now)
         .order_by(flights.c.arrival_at).limit(10)
     ).scalars().all()
     hotel_cities = db.execute(
@@ -396,7 +397,7 @@ def _owned_destinations(db, traveler_id: str, as_of: date) -> list[str]:
         .join(hotel_products, hotel_products.c.hotel_id == hotels.c.id)
         .join(hotel_orders, hotel_orders.c.product_id == hotel_products.c.id)
         .where(hotel_orders.c.traveler_id == traveler_id,
-               hotel_orders.c.status == "confirmed", hotel_orders.c.check_out > as_of)
+               hotel_orders.c.status == "confirmed", hotel_orders.c.check_out > now.date())
         .order_by(hotel_orders.c.check_in).limit(10)
     ).scalars().all()
     return list(dict.fromkeys([*flight_cities, *hotel_cities]))
@@ -505,7 +506,7 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
         return result("当前航班网络没有可核实的可达城市，暂无法推荐地点。")
     as_of = db.execute(select(demo_state.c.as_of).where(
         demo_state.c.id == 1)).scalar_one_or_none() or date.today()
-    owned = [city for city in _owned_destinations(db, traveler_id, as_of) if city in cities]
+    owned = [city for city in _owned_destinations(db, traveler_id) if city in cities]
     candidate = params.get("city") if isinstance(params.get("city"), str) else None
     outbound = bool(re.search(r"其他国家|别的国家|国外|出国|境外", user_text)
                     or ("中国" in user_text and re.search(r"其他地方|别的地方", user_text)

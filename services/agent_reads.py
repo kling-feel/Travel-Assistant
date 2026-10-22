@@ -1,5 +1,7 @@
 """Bounded, traveler-scoped evidence for the read-only conversation graph."""
 
+import re
+
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -146,29 +148,26 @@ def read_for_assistant(db, traveler_id, intent, params):
     if intent == "itinerary":
         rows = itinerary(db, traveler_id)
         question = _as_text(params.get("_user_text"), 4000) or ""
-        if any(word in question for word in ("现在", "还有", "要出发", "出发吗",
+        historical = any(word in question for word in ("历史", "取消过", "取消记录", "已取消的",
+                                                        "以前的订单", "过去的订单"))
+        if not historical and any(word in question for word in ("现在", "还有", "要出发", "出发吗",
                                               "最近", "近期", "接下来", "未来")):
             now = datetime.now(timezone.utc)
             flight_only_question = any(word in question for word in ("机票", "航班", "出发"))
             def after_now(stamp):
                 return stamp.replace(tzinfo=stamp.tzinfo or timezone.utc) > now
-            active = [item for item in rows["flight_orders"] if item["status"] == "confirmed"
+            active = [item for item in rows["flight_orders"] if item["display_state"] == "active"
                       and after_now(item["departure_at"] if flight_only_question
                                     else item["arrival_at"])]
             if not flight_only_question:
-                active_hotels = [item for item in rows["hotel_orders"] if item["status"] == "confirmed"
-                                 and item["check_out"] > _hotel_today(db, item["product_id"], now)]
-                active_rentals = [item for item in rows["rental_orders"] if item["status"] == "confirmed"
-                                  and item["dropoff_at"].replace(tzinfo=item["dropoff_at"].tzinfo or timezone.utc) > now]
+                active_hotels = [item for item in rows["hotel_orders"] if item["display_state"] == "active"]
+                active_rentals = [item for item in rows["rental_orders"] if item["display_state"] == "active"]
                 details = ([f"机票 {item['flight_no']}，起飞 {_local_time(item['departure_at'], _airport(db, item['departure_airport'])[1])}"
                             for item in active[:3]] +
                            [f"酒店 {product_zh(item['name'], city=item['city'])}，{item['check_in']} 入住、{item['check_out']} 退房"
                             for item in active_hotels[:3]] +
                            [f"租车 {product_zh(item['name'], airport=item['airport_code'])}，取车 {_local_time(item['pickup_at'], item['airport_timezone'])}"
                             for item in active_rentals[:3]])
-                cancelled = sum(item["status"] == "cancelled" for kind in
-                                ("flight_orders", "hotel_orders", "rental_orders") for item in rows[kind])
-                history_note = f"另有 {cancelled} 笔已取消订单在历史记录中。" if cancelled else ""
                 answer = ("目前有效行程：" + "；".join(details) + "。") if details else "目前没有进行中或未来的已确认行程。"
                 references = [{"type": "order", "id": item["id"], "kind": kind,
                                "version": item["version"], "status": item["status"]}
@@ -176,14 +175,9 @@ def read_for_assistant(db, traveler_id, intent, params):
                                                   ("hotel_orders", active_hotels),
                                                   ("rental_orders", active_rentals))
                               for item in items[:3]]
-                return _result(answer + history_note, references)
+                return _result(answer, references)
             if not active:
-                cancelled = sum(item["status"] == "cancelled" for item in rows["flight_orders"])
-                note = f"；另有 {cancelled} 笔已取消机票留在历史记录中" if cancelled else ""
-                return _result(f"目前没有未来待出发的已确认机票{note}。",
-                               [{"type": "order", "id": item["id"], "kind": "flight_orders",
-                                 "version": item["version"], "status": item["status"]}
-                                for item in rows["flight_orders"][:5]])
+                return _result("目前没有未来待出发的已确认机票。")
             details = "；".join(
                 f"{_airport(db, item['departure_airport'])[0]} → {_airport(db, item['arrival_airport'])[0]}，"
                 f"航班 {item['flight_no']}，起飞 {_local_time(item['departure_at'], _airport(db, item['departure_airport'])[1])}"
@@ -192,15 +186,22 @@ def read_for_assistant(db, traveler_id, intent, params):
                            [{"type": "order", "id": item["id"], "kind": "flight_orders",
                              "version": item["version"], "status": item["status"]}
                             for item in active[:3]])
-        flight_only = "起飞" in question or "航班时间" in question
-        hotel_only = "退房时间" in question or "入住时间" in question
+        named = {kind for kind, words in (("flight_orders", "机票|航班|起飞"),
+                                          ("hotel_orders", "酒店|住宿|入住|退房"),
+                                          ("rental_orders", "租车|车辆|取车|还车"))
+                 if re.search(words, question)}
         parts = []
         references = []
         for kind, label in (("flight_orders", "机票"), ("hotel_orders", "酒店"),
                             ("rental_orders", "租车")):
-            if (flight_only and kind != "flight_orders") or (hotel_only and kind != "hotel_orders"):
+            if len(named) == 1 and kind not in named:
                 continue
-            orders = rows[kind][:5]
+            orders = ([item for item in rows[kind] if item["display_state"] != "active"]
+                      if historical else
+                      [item for item in rows[kind] if item["display_state"] == "active"])
+            if historical and "取消" in question:
+                orders = [item for item in orders if item["display_state"] == "cancelled"]
+            orders = orders[:5]
             if not orders:
                 parts.append(f"{label}：暂无订单")
                 continue
@@ -209,14 +210,14 @@ def read_for_assistant(db, traveler_id, intent, params):
                     f"{_airport(db, item['departure_airport'])[0]} → {_airport(db, item['arrival_airport'])[0]}"
                     f"（航班 {item['flight_no']}，起飞 {_local_time(item['departure_at'], _airport(db, item['departure_airport'])[1])}，"
                     f"到达 {_local_time(item['arrival_at'], _airport(db, item['arrival_airport'])[1])}，"
-                    f"订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}"
+                    f"订单 {item['id']}，{'已结束' if item['display_state'] == 'finished' else _STATUS_NAMES.get(item['status'], item['status'])}"
                     f"{'，起飞时间已过' if item['departure_at'].replace(tzinfo=item['departure_at'].tzinfo or timezone.utc) <= datetime.now(timezone.utc) else ''}）"
                     for item in orders]
             elif kind == "hotel_orders":
                 descriptions = [
                     f"{product_zh(item['name'], city=item['city'])} {room_zh(item['room_type'])}"
                     f"（{item['check_in']} 入住、{item['check_out']} 退房，"
-                    f"订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}"
+                    f"订单 {item['id']}，{'已结束' if item['display_state'] == 'finished' else _STATUS_NAMES.get(item['status'], item['status'])}"
                     f"{'，入住日期已过' if item['check_in'] < _hotel_today(db, item['product_id'], datetime.now(timezone.utc)) else ''}）"
                     for item in orders]
             else:
@@ -224,13 +225,13 @@ def read_for_assistant(db, traveler_id, intent, params):
                     f"{product_zh(item['name'], city=_airport(db, item['airport_code'])[2], airport=item['airport_code'])}"
                     f"（取车 {_local_time(item['pickup_at'], item['airport_timezone'])}、"
                     f"还车 {_local_time(item['dropoff_at'], item['airport_timezone'])}，"
-                    f"订单 {item['id']}，{_STATUS_NAMES.get(item['status'], item['status'])}）"
+                    f"订单 {item['id']}，{'已结束' if item['display_state'] == 'finished' else _STATUS_NAMES.get(item['status'], item['status'])}）"
                     for item in orders]
             parts.append(f"{label}：" + "；".join(descriptions))
             references.extend({"type": "order", "id": item["id"], "kind": kind,
                                "version": item["version"], "status": item["status"]}
                               for item in orders)
-        return _result("我的行程：" + "；".join(parts), references)
+        return _result(("历史订单：" if historical else "我的有效行程：") + "；".join(parts), references)
 
     if intent == "policy":
         scope = _as_text(params.get("scope"), 16)

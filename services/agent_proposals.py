@@ -9,6 +9,7 @@ from db.travel_models import (chat_turns, flight_offers, flight_orders, hotel_or
                               hotel_products, rental_orders, rental_products)
 from services.actions import FIELDS
 from services.dialogue_context import mentioned_cities, mentioned_dates
+from services.order_targeting import matching_orders, order_options
 
 
 class SelectionNeeded(ValueError):
@@ -132,18 +133,25 @@ def _owned_order(db, traveler_id, kind, proposed, text, *, all_cancellations=Fal
     rows = db.execute(select(table).where(
         table.c.traveler_id == traveler_id, table.c.status == "confirmed",
     )).mappings().all()
-    if proposed is not None:
-        matched = [row for row in rows if row["id"] == proposed]
-        if not matched:
-            raise SelectionNeeded("未找到可办理的本人订单，请查看行程并指定订单。")
-        if len(rows) > 1 and proposed not in text and not all_cancellations:
-            raise SelectionNeeded("本人有多笔有效订单，请明确指出要办理的订单。")
-        return matched[0]
-    if len(rows) == 1:
-        return rows[0]
     if not rows:
         raise SelectionNeeded("本人没有可办理的有效订单。")
-    raise SelectionNeeded("本人有多笔有效订单，请明确指出要办理的订单。")
+    if all_cancellations:
+        selected = next((row for row in rows if row["id"] == proposed), None)
+        if selected is None:
+            raise SelectionNeeded("未找到可办理的本人订单，请刷新行程。")
+        return selected
+    matches = matching_orders(db, traveler_id, kind, text, rows)
+    if not matches:
+        raise SelectionNeeded("没有找到符合你描述的本人有效订单，请核对地点或订单号。")
+    if len(matches) > 1:
+        from services.travel import itinerary
+        details = {row["id"]: row for row in itinerary(db, traveler_id)[f"{kind}_orders"]}
+        raise SelectionNeeded("找到多笔符合条件的本人订单，请选择其中一笔：" +
+                              order_options(kind, [details.get(row["id"], row) for row in matches]))
+    chosen = matches[0]
+    if proposed is not None and proposed != chosen["id"]:
+        raise SelectionNeeded("模型建议的订单与你描述的不一致，请重新核对目标。")
+    return next(row for row in rows if row["id"] == chosen["id"])
 
 
 def _date_grounded(value, text, today):
@@ -202,7 +210,8 @@ def _dates_grounded(action_type, params, text, today, candidate=None, grounded=N
 
 
 def prepare_actions(db, traveler_id, plans, references, user_text,
-                    context_text=None, today=None, grounded_context=None):
+                    context_text=None, today=None, grounded_context=None,
+                    bulk_cancel=False):
     if not isinstance(plans, list) or not 1 <= len(plans) <= 2:
         raise SelectionNeeded("请说明要办理的一到两笔具体交易。")
     if re.search(r"改签.+(?:并|同时|再).*(?:订|预订).*(?:酒店|房)", user_text):
@@ -223,9 +232,7 @@ def prepare_actions(db, traveler_id, plans, references, user_text,
         kind, operation = action_type.split("_", 1)
         if operation in ("change", "cancel"):
             order = _owned_order(db, traveler_id, kind, params.get("order_id"),
-                                 user_text, all_cancellations=(operation == "cancel"
-                                 and "取消" in user_text
-                                 and bool(re.search(r"所有|全部", user_text))))
+                                 user_text, all_cancellations=bulk_cancel)
             params["order_id"] = order["id"]
             params["expected_version"] = order["version"]
         if operation == "book" or (kind in ("flight", "hotel") and operation == "change"):
