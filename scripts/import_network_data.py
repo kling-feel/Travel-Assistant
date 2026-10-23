@@ -170,13 +170,17 @@ def _stage(connection, airport_rows, flight_rows, offer_rows):
         raise ValueError("Staged bookable routes changed")
 
 
-def _formal_reset(connection, as_of, passwords, fixture_sha256, products):
+def _assert_reset_safe(connection):
     users = set(connection.execute(select(travelers.c.username)).scalars())
     if users - {"demo1", "demo2"}:
         raise RuntimeError("Non-demo account exists; refusing to reset")
     if connection.execute(select(func.count()).select_from(pending_actions).where(
             pending_actions.c.status == "pending")).scalar_one():
         raise RuntimeError("Pending actions exist; resolve them before resetting")
+
+
+def _formal_reset(connection, as_of, passwords, fixture_sha256, products):
+    _assert_reset_safe(connection)
     if connection.execute(text("SELECT to_regclass('public.checkpoints')")).scalar_one() is not None:
         for table_name in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
             connection.execute(text(f"DELETE FROM {table_name}"))
