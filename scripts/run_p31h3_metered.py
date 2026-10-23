@@ -25,6 +25,8 @@ LEDGER = ROOT / "data/generated/p31h3-paid-ledger.json"
 MODEL_CAP = 20
 SEARCH_CAP = 10
 MODEL_RMB_CAP = 8.0
+RETRYABLE_FAILURES = frozenset()
+UNKNOWN_RMB_RESERVE = 0.2
 _guard = threading.Lock()
 
 
@@ -42,9 +44,11 @@ def _reserve(kind, path=None):
         rows = _rows()
         model_rows = [row for row in rows if row["kind"] == "model"]
         if kind == "model":
-            estimate = sum(row.get("upper_rmb", 0) for row in model_rows)
-            if (len(model_rows) >= MODEL_CAP or estimate + 0.2 > MODEL_RMB_CAP or
-                    any(row.get("status") not in ("ok", "sandbox_denied")
+            estimate = sum(row.get("upper_rmb", UNKNOWN_RMB_RESERVE
+                                   if row.get("status") in RETRYABLE_FAILURES else 0)
+                           for row in model_rows)
+            if (len(model_rows) >= MODEL_CAP or estimate + UNKNOWN_RMB_RESERVE > MODEL_RMB_CAP or
+                    any(row.get("status") not in ("ok", "sandbox_denied", *RETRYABLE_FAILURES)
                         for row in model_rows)):
                 raise RuntimeError("P3.1h3 model attempt, usage, or cost limit reached")
         elif sum(row["kind"] == "search" for row in rows) >= SEARCH_CAP:
@@ -87,7 +91,10 @@ class CountedModel:
             with _guard:
                 current = _rows()[index]["status"]
             if current == "started":
-                _finish(index, status=type(error).__name__,
+                name = type(error).__name__
+                _finish(index, status=name,
+                        **({"upper_rmb": UNKNOWN_RMB_RESERVE}
+                           if name in RETRYABLE_FAILURES else {}),
                         seconds=round(perf_counter()-start, 3))
             raise
 

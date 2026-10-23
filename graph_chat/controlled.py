@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
+from services.agent_feedback import bulk_cancellation_requested
 from services.dialogue_boundaries import boundary_intent
 from services.country_flights import country_in_text
 from services.dialogue_context import (declared_current_city, flight_followup, local_today,
@@ -214,6 +215,9 @@ def build_graph(model, read_evidence, checkpointer):
             task_seed = prior_context
         direct_intent, direct_params, direct_context = read_request(
             user_text, "general", {}, task_seed, base)
+        if bulk_cancellation_requested(user_text):
+            # The API resolves these orders from the database after graph routing.
+            return {"intent": "general", "params": {}, "draft": "我会先核对本人订单和取消范围。"}
         discovery = dict(tasks.get("trip_discovery") or {})
         places = mentioned_cities(user_text)
         destination_open = bool(re.search(r"哪里|去哪|什么地方|一个地方|目的地|风景|景色|适合.{0,6}地方", user_text))
@@ -344,6 +348,18 @@ def build_graph(model, read_evidence, checkpointer):
         if re.search(r"你(?:还)?记得|还记得|(?:我们|咱们)?(?:前面|之前|刚才).{0,8}(?:说过|聊过).{0,3}(?:什么|哪些)|"
                      r"(?:刚才|前面|之前).{0,6}聊到哪一步", user_text):
             return {"intent": "memory", "params": {}, "draft": ""}
+        if (re.search(r"取消.{0,8}(?:刚才|前面|上面).{0,8}(?:一笔|那个|这笔)", user_text)
+                and not re.search(r"机票|航班|酒店|住宿|租车|车辆|订单\s*[A-Za-z0-9]", user_text)):
+            cards = read_evidence("memory_cards", {}).get("cards", [])
+            pending = [card for card in cards if card.get("status") == "pending"
+                       and card.get("action_type", "").endswith("_cancel")]
+            if len(pending) > 1:
+                detail = "本会话有多张待确认的取消卡。请指出具体订单，或在页面逐张核对并确认；订单尚未改变。"
+            elif pending:
+                detail = "本会话已有一张待确认的取消卡。请在页面核对并确认或放弃；我不会替你确认。"
+            else:
+                detail = "当前没有可指代的待确认取消卡。请说明要取消的订单或行程。"
+            return {"intent": "general", "params": {}, "draft": detail}
         if (not writes and direct_intent == "flight_search" and flight_task
                 and direct_context.get("arrival") == flight_task.get("arrival")
                 and re.fullmatch(r"我(?:想|要|打算)?去[\u4e00-\u9fffA-Za-z ]+[。！!]?", user_text.strip())):
@@ -505,7 +521,7 @@ def build_graph(model, read_evidence, checkpointer):
         if not writes and direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
             return {"intent": direct_intent, "params": direct_params,
                     "context": direct_context, "draft": ""}
-        if re.search(r"历史订单|订单历史|行程历史|历史行程|取消过|取消记录|已取消的", user_text) and not writes:
+        if re.search(r"历史订单|订单历史|行程历史|历史行程|取消过|取消记录|取消历史|已取消的", user_text) and not writes:
             return {"intent": "itinerary", "params": {},
                     "context": prior_context, "draft": ""}
         if (re.search(r"(?:现在|还有|最近|近期|接下来|未来).{0,12}(?:行程|安排|机票|航班|出发)|"

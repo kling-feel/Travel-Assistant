@@ -3,19 +3,28 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
+from api.travel import _card_brief
 from db.travel_models import (airports, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, policy_documents,
                               rental_orders, rental_products)
 from services.agent_reads import read_for_assistant
-from services.agent_feedback import bulk_cancellation_requested
+from services.agent_feedback import bulk_cancellation_requested, cancellation_overview
 from services.order_targeting import matching_orders
 from services.policy_catalog import CURRENT_POLICIES
+from services.location_labels import airport_zh
 from tests import test_p26a_dialogue as cases
 
 
 class ItineraryCancelTests(unittest.TestCase):
+    def test_cancel_card_keeps_meaningful_airport_name(self):
+        card = {"action_type": "flight_cancel", "after": {
+            "departure_airport": "HAM", "arrival_airport": "BSL",
+            "flight_no": "SIM-8152", "departure_local": "2026-10-24T17:58:00+02:00"}}
+        self.assertIn("汉堡机场 → 巴塞尔米卢斯机场", _card_brief(card))
+        self.assertEqual(airport_zh("ZZZ", ""), "ZZZ")
+
     def setUp(self):
         self.fixture = cases.DialogueTests("runTest")
         self.fixture.setUp()
@@ -104,6 +113,8 @@ class ItineraryCancelTests(unittest.TestCase):
             history = read_for_assistant(db, "t1", "itinerary", {"_user_text": "我取消过什么机票"})
             self.assertIn("cancelled-flight", history["answer"])
             self.assertNotIn("basel-flight", history["answer"])
+            self.assertIn("cancelled-flight", read_for_assistant(
+                db, "t1", "itinerary", {"_user_text": "查看取消历史"})["answer"])
         client, model_patch, saver_patch = self.fixture.client(cases.ScriptedModel())
         with model_patch, saver_patch, client:
             one = self.fixture.auth(client, "demo1", "password1")
@@ -168,28 +179,75 @@ class ItineraryCancelTests(unittest.TestCase):
             self.assertIn("SIM-4", result.json()["answer"])
             self.assertNotIn("other-flight", result.json()["answer"])
 
+    def test_cross_city_flight_halts_cards_but_lists_other_affected_orders(self):
+        with self.fixture.engine.begin() as db:
+            db.execute(insert(flights).values(
+                id=4, flight_no="SIM-4", departure_airport="LGW",
+                arrival_airport="BSL", status="Scheduled",
+                departure_at=self.future + timedelta(days=1),
+                arrival_at=self.future + timedelta(days=1, hours=2)))
+            db.execute(insert(flight_orders).values(
+                id="cross-city-flight", traveler_id="t1", flight_id=4,
+                amount=500, status="confirmed", version=1))
+        with self.fixture.engine.connect() as db:
+            answer, cards = cancellation_overview(
+                db, "t1", "保留伦敦，取消其他安排")
+        self.assertEqual(cards, [])
+        self.assertIn("cross-city-flight", answer)
+        self.assertIn("basel-flight", answer)
+        self.assertIn("basel-hotel", answer)
+        self.assertIn("basel-rental", answer)
+        self.assertIn("london-flight", answer)
+        self.assertIn("没有生成取消卡", answer)
+
+    def test_bulk_hotel_cancellation_excludes_past_check_in(self):
+        with self.fixture.engine.begin() as db:
+            db.execute(update(hotel_orders).where(hotel_orders.c.id == "basel-hotel")
+                       .values(check_in=(datetime.now(timezone.utc) - timedelta(days=1)).date(),
+                               check_out=(datetime.now(timezone.utc) + timedelta(days=1)).date()))
+        with self.fixture.engine.connect() as db:
+            answer, cards = cancellation_overview(db, "t1", "取消所有酒店")
+        self.assertEqual([row["parameters"]["order_id"] for row in cards],
+                         ["london-hotel"])
+        self.assertIn("basel-hotel", answer)
+        self.assertIn("已过取消截止日期", answer)
+
     def test_preserve_london_lists_remainder_and_confirms_only_one(self):
-        model = cases.ScriptedModel({"intent": "general", "params": {}, "answer": ""})
+        model = cases.ScriptedModel()
         client, model_patch, saver_patch = self.fixture.client(model)
         with model_patch, saver_patch, client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             result = self.fixture.turn(client, sid, auth, "f2-bulk-001", "保留伦敦，取消其他安排")
             self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(model.history_lengths, [])
             answer, cards = result.json()["answer"], result.json()["actions"]
             self.assertEqual(len(cards), 2)
             self.assertIn("basel-rental", answer)
             self.assertIn("尚未生成卡", answer)
             self.assertIn("london-flight", answer)
+            self.assertNotIn("T10:00:00", answer)
             self.assertEqual(answer.count("本轮仅为"), 1)
             self.assertEqual(answer.count("请在下方逐张核对"), 1)
             self.assertNotIn("需逐笔确认。", answer)
             self.assertTrue(all(card["target_order_id"].startswith("basel-") for card in cards))
             before = client.get("/api/v1/me/itinerary", headers=auth).json()
             self.assertTrue(all(row["status"] == "confirmed" for row in before["hotel_orders"]))
+            pointer = self.fixture.turn(client, sid, auth, "f2-pointer-001", "只取消刚才那一笔")
+            self.assertEqual(pointer.status_code, 200, pointer.text)
+            self.assertEqual(pointer.json()["actions"], [])
+            self.assertIn("多张待确认", pointer.json()["answer"])
             card = cards[0]
+            other = self.fixture.auth(client, "demo2", "password2")
+            self.assertEqual(client.post(
+                f"/api/v1/sessions/{sid}/actions/{card['id']}/confirm",
+                headers=other).status_code, 404)
             done = client.post(f"/api/v1/sessions/{sid}/actions/{card['id']}/confirm", headers=auth)
             self.assertEqual(done.status_code, 200, done.text)
+            repeated = client.post(f"/api/v1/sessions/{sid}/actions/{card['id']}/confirm",
+                                   headers=auth)
+            self.assertEqual(repeated.status_code, 200)
+            self.assertEqual(repeated.json(), done.json())
             after = client.get("/api/v1/me/itinerary", headers=auth).json()
             statuses = {row["id"]: row["status"] for kind in after for row in after[kind]}
             self.assertEqual(statuses[card["target_order_id"]], "cancelled")
@@ -203,6 +261,9 @@ class ItineraryCancelTests(unittest.TestCase):
             history = self.fixture.turn(client, sid, auth, "f2-history-001", "查看历史订单")
             self.assertEqual(history.status_code, 200, history.text)
             self.assertIn(card["target_order_id"], history.json()["answer"])
+            cancel_history = self.fixture.turn(client, sid, auth, "f2-history-002", "查看取消历史")
+            self.assertEqual(cancel_history.status_code, 200, cancel_history.text)
+            self.assertIn(card["target_order_id"], cancel_history.json()["answer"])
 
 
 if __name__ == "__main__":

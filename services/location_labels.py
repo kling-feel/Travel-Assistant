@@ -59,6 +59,7 @@ CITY_ZH = {english: chinese for chinese, english in
 # Distinguish airports that share a city; other entries use the city plus “机场”.
 AIRPORT_NAMES = {
     "BSL": "巴塞尔米卢斯机场", "CDG": "巴黎戴高乐机场", "ORY": "巴黎奥利机场",
+    "HAM": "汉堡机场",
     "DCA": "华盛顿里根机场", "IAD": "华盛顿杜勒斯机场",
     "DME": "莫斯科多莫杰多沃机场", "SVO": "莫斯科谢列梅捷沃机场",
     "HND": "东京羽田机场", "NRT": "东京成田机场",
@@ -75,7 +76,7 @@ def city_zh(city: str) -> str:
 
 
 def airport_zh(code: str, city: str) -> str:
-    return AIRPORT_NAMES.get(code, f"{city_zh(city)}机场")
+    return AIRPORT_NAMES.get(code, f"{city_zh(city)}机场" if city else code or "机场")
 
 
 def product_zh(name: str, *, city: str = "", airport: str = "") -> str:

@@ -25,6 +25,13 @@ def _flight_detail(db, flight):
     return f"航班 {flight['flight_no']}（当地起飞 {local}）"
 
 
+def _local_display(value):
+    try:
+        return datetime.fromisoformat(value).strftime("%Y-%m-%d %H:%M（当地）")
+    except (TypeError, ValueError):
+        return "时间待核对"
+
+
 def _owned_flight(db, traveler_id, order_id=None):
     rows = db.execute(select(flight_orders, flights).join(
         flights, flight_orders.c.flight_id == flights.c.id).where(
@@ -161,17 +168,20 @@ def cancellation_overview(db, traveler_id, text=None):
                     retained.append(f"{identity}：在{city_zh(keep_city)}取车，保留。")
                     continue
                 eligible_now = _utc(order["pickup_at"]) > now
-                detail = f"{order['pickup_local']} 取车，{'可申请取消' if eligible_now else '已过取车时间，不能取消'}"
+                detail = (f"{_local_display(order['pickup_local'])} 取车，"
+                          f"{'可申请取消' if eligible_now else '已过取车时间，不能取消'}")
             if eligible_now:
                 eligible.append({"action_type": f"{kind}_cancel",
                                  "parameters": {"order_id": order["id"]}})
             lines.append(f"{identity}：{detail}。")
+    if len(lines) + len(retained) + len(ambiguous) > 35 or sum(
+            map(len, [*lines, *retained, *ambiguous])) > 3000:
+        return "符合范围的订单较多，请缩小到机票、酒店或租车，并指定日期；本轮没有生成卡。", []
     if ambiguous:
-        return "\n".join([*retained, *ambiguous, "请先确认这些跨城订单的去留；目前没有生成取消卡。"]), []
+        return "\n".join([*retained, *lines, *ambiguous,
+                          "请先确认这些跨城订单的去留；上列可取消订单也没有生成取消卡，订单均未改变。"]), []
     if not lines and not retained:
         return "你目前没有符合这次范围的已确认订单可供核对。", []
-    if len(lines) + len(retained) > 35 or sum(map(len, [*lines, *retained])) > 3000:
-        return "符合范围的订单较多，请缩小到机票、酒店或租车，并指定日期；本轮没有生成卡。", []
     selected = eligible[:2]
     selected_ids = [item["parameters"]["order_id"] for item in selected]
     remaining = [item["parameters"]["order_id"] for item in eligible[2:]]
