@@ -535,6 +535,12 @@ def build_graph(model, read_evidence, checkpointer):
                     "context": prior_context, "draft": ""}
         if re.search(r"什么模型|模型内核|底层模型|使用.{0,5}模型", user_text):
             return {"intent": "general", "params": {"mode": "model_info"}, "draft": ""}
+        if (re.search(r"确认前|未确认|还没确认|没有确认", user_text)
+                and re.search(r"订单|行程|待确认卡", user_text)
+                and re.search(r"改变|变化|生效|修改|执行", user_text)):
+            return {"intent": "general", "params": {}, "draft":
+                    "不会。待确认卡只是提案；只有你在卡片上逐张确认，且服务端核验通过后，"
+                    "模拟订单才会改变。放弃或过期的卡不会修改订单。"}
         if re.search(r"你听不懂|没听懂|为什么不行|为什么不能|刚才为什么", user_text):
             if "已生成" in previous and "待确认卡" in previous:
                 clarification = ("上一轮只生成了待确认卡，订单尚未改变。"

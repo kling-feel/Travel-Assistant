@@ -1,6 +1,7 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+const browserSessionKey = "travel-assistant-session-v1";
 const state = { token: null, generation: 0, controllers: new Set(), sessionId: null,
   sessionRevision: 0, sending: false, pendingTurn: null, turnController: null,
   busyAction: false, dialogAction: null,
@@ -33,6 +34,20 @@ function appendText(parent, tag, className, value) { const child = el(tag, class
 function empty(node, message) { node.replaceChildren(el("p", "subtle", message)); }
 function notice(message, error = false) {
   const box = $("notice"); box.textContent = message; box.classList.toggle("error", error); box.hidden = !message;
+}
+function savedBrowserSession() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(browserSessionKey) || "null");
+    return typeof value?.token === "string" && value.token ? value : null;
+  } catch { return null; }
+}
+function rememberBrowserSession() {
+  if (!state.token) return;
+  try { sessionStorage.setItem(browserSessionKey, JSON.stringify({
+    token: state.token, sessionId: state.sessionId })); } catch { /* Storage may be disabled. */ }
+}
+function forgetBrowserSession() {
+  try { sessionStorage.removeItem(browserSessionKey); } catch { /* Storage may be disabled. */ }
 }
 function errorText(error) {
   if (error.name === "InputError") return error.message;
@@ -74,6 +89,7 @@ async function request(path, options = {}) {
 }
 function logout(message = "") {
   state.generation++;
+  forgetBrowserSession();
   for (const controller of state.controllers) controller.abort();
   state.controllers.clear(); state.token = null; state.sessionId = null;
   state.sessionRevision++; state.pendingTurn = null; state.sending = false; state.turnController = null;
@@ -382,9 +398,11 @@ async function loadSessions(preferred = null) {
 async function selectSession(id) {
   if (state.turnController) state.turnController.abort();
   state.sessionId = id; state.sessionRevision++;
+  rememberBrowserSession();
   const revision = state.sessionRevision;
   state.pendingTurn = null; state.sending = false; $("send-button").disabled = false;
   $("turn-status").textContent = "";
+  notice("");
   $("retry-turn").hidden = true;
   for (const button of $("session-list").querySelectorAll(".session-item"))
     button.classList.toggle("active", button.textContent.includes(String(id || "").slice(0, 8)) && !!id);
@@ -748,6 +766,13 @@ async function search(kind, form) {
   finally { button.disabled = false; }
 }
 
+async function showWorkspace(profile, demo, locations, preferred = null) {
+  $("identity").textContent = (profile.display_name || profile.username).replace(/^演示旅客\s*/, "旅客 ");
+  initDates(demo); loadLocationOptions(locations); $("login-view").hidden = true; $("workspace").hidden = false;
+  $("logout").hidden = false; $("login-message").textContent = ""; notice("");
+  await Promise.all([loadSessions(preferred), refreshItinerary(), refreshHistory()]);
+  rememberBrowserSession();
+}
 $("login-form").addEventListener("submit", async (event) => {
   event.preventDefault(); const button = $("login-button"); button.disabled = true;
   $("login-message").textContent = "正在登录…";
@@ -757,10 +782,7 @@ $("login-form").addEventListener("submit", async (event) => {
     state.token = login.access_token; $("password").value = "";
     const [profile, demo, locations] = await Promise.all([
       request("/api/v1/me"), request("/api/v1/demo-state"), request("/api/v1/locations")]);
-    $("identity").textContent = (profile.display_name || profile.username).replace(/^演示旅客\s*/, "旅客 ");
-    initDates(demo); loadLocationOptions(locations); $("login-view").hidden = true; $("workspace").hidden = false;
-    $("logout").hidden = false; $("login-message").textContent = ""; notice("");
-    await Promise.all([loadSessions(), refreshItinerary(), refreshHistory()]);
+    await showWorkspace(profile, demo, locations);
   } catch (error) { if (state.token) logout(); $("login-message").textContent = errorText(error); }
   finally { button.disabled = false; }
 });
@@ -781,3 +803,32 @@ $("action-dialog").addEventListener("close", () => { if (!state.busyAction) stat
 for (const button of document.querySelectorAll(".tab")) button.addEventListener("click", () => setPanel(button.dataset.panel));
 for (const [id, kind] of [["flight-form", "flights"], ["hotel-form", "hotels"], ["rental-form", "rentals"]])
   $(id).addEventListener("submit", (event) => { event.preventDefault(); search(kind, $(id)); });
+
+async function restoreBrowserSession() {
+  const saved = savedBrowserSession();
+  if (!saved) return;
+  const button = $("login-button"); button.disabled = true;
+  $("login-message").textContent = "正在恢复会话…";
+  state.token = saved.token;
+  try {
+    const profile = await request("/api/v1/me");
+    const [demo, locations] = await Promise.all([
+      request("/api/v1/demo-state"), request("/api/v1/locations")]);
+    await showWorkspace(profile, demo, locations, saved.sessionId);
+  } catch (error) {
+    if (error.status === 401 || !state.token) {
+      if (state.token) logout("登录已失效，请重新登录。");
+      $("login-message").textContent = "登录已失效，请重新登录。";
+    }
+    else {
+      state.generation++;
+      for (const controller of state.controllers) controller.abort();
+      state.controllers.clear();
+      state.token = null;
+      state.sessionId = null;
+      $("workspace").hidden = true; $("login-view").hidden = false; $("logout").hidden = true;
+      $("login-message").textContent = "暂时无法恢复会话，请检查连接后刷新页面。";
+    }
+  } finally { button.disabled = false; }
+}
+restoreBrowserSession();

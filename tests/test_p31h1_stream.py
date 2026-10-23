@@ -33,6 +33,26 @@ class StreamTurnTests(unittest.TestCase):
     def tearDown(self):
         self.fixture.tearDown()
 
+    def test_confirmation_question_explains_order_boundary_without_new_card(self):
+        model = dialogue_cases.ScriptedModel()
+        client, model_patch, saver_patch = self.fixture.client(model)
+        with model_patch, saver_patch, client:
+            auth = self.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            response = client.post(f"/api/v1/sessions/{sid}/turns/stream",
+                                   headers=auth, json={
+                                       "request_key": "confirmation-help-001",
+                                       "content": "请简要说明确认前订单是否会改变",
+                                   })
+            self.assertEqual(events(response)[-1][0], "completed")
+            answer = "".join(data["text"] for kind, data in events(response)
+                             if kind == "delta")
+            self.assertIn("不会", answer)
+            self.assertIn("逐张确认", answer)
+            self.assertEqual(client.get(f"/api/v1/sessions/{sid}/actions",
+                                        headers=auth).json(), [])
+            self.assertEqual(model.history_lengths, [])
+
     def test_stream_is_owned_saved_and_idempotent(self):
         answer = "中文答复" * 45
         model = dialogue_cases.ScriptedModel({"intent": "general", "params": {}, "answer": answer})
@@ -117,6 +137,21 @@ class StreamTurnTests(unittest.TestCase):
                 cards = client.get(f"/api/v1/sessions/{sid}/actions", headers=auth).json()
                 self.assertEqual(len(cards), 2)
                 self.assertEqual({card["status"] for card in cards}, {"pending"})
+                replay = client.post(f"/api/v1/sessions/{sid}/turns/stream",
+                                     headers=auth, json={
+                                         "request_key": "stream-cards-001",
+                                         "content": "保留伦敦，取消其他安排",
+                                     })
+                self.assertEqual(events(replay)[-1][0], "completed")
+                self.assertEqual([card["id"] for card in client.get(
+                    f"/api/v1/sessions/{sid}/actions", headers=auth).json()],
+                    [card["id"] for card in cards])
+                history = client.get(f"/api/v1/sessions/{sid}", headers=auth).json()
+                self.assertEqual([row["role"] for row in history["messages"]],
+                                 ["user", "assistant"])
+                other_session = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+                self.assertEqual(client.get(f"/api/v1/sessions/{other_session}/actions",
+                                            headers=auth).json(), [])
                 with case.fixture.engine.connect() as db:
                     self.assertEqual(db.execute(select(flight_orders.c.status).where(
                         flight_orders.c.id == "basel-flight")).scalar_one(), "confirmed")
