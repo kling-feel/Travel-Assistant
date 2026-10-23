@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.verify_network_fixture import verify_fixture
 
 
-DEFAULT_SOURCE = ROOT / "travel_new.sqlite"
+DEFAULT_SOURCE = ROOT / "data" / "source" / "travel_new.sqlite"
 DEFAULT_OUTPUT = ROOT / "data" / "fixtures" / "network_source.sqlite"
 AIRPORT_QUERY = (
     "SELECT airport_code, airport_name, city, coordinates, timezone "

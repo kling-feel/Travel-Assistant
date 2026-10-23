@@ -13,7 +13,6 @@ from scripts.import_network_data import FIXTURE, prepare_snapshot
 from services.city_products import GENERATION_RULE, generate_products
 from services.policy_catalog import ALL_POLICIES, CURRENT_POLICIES, SEED_POLICIES
 from services.travel import OrderError, find_hotels, find_rentals, policies
-from tools.retriever_vector import lookup_policy
 
 
 class CityProductTests(unittest.TestCase):
@@ -125,10 +124,13 @@ class CityProductTests(unittest.TestCase):
             self.assertEqual(find_rentals(db, day, check_out, city="London"), [])
             with self.assertRaises(OrderError):
                 find_rentals(db, check_out, check_in, city="London")
-            self.assertEqual([row["id"] for row in policies(db, "flight")],
-                             [CURRENT_POLICIES["flight"]["id"]])
-            self.assertEqual([row["id"] for row in policies(db, "rental")],
-                             [CURRENT_POLICIES["rental"]["id"]])
+            for scope in ("flight", "hotel", "rental"):
+                current = CURRENT_POLICIES[scope]
+                self.assertEqual(
+                    [{field: row[field] for field in ("id", "version", "body")}
+                     for row in policies(db, scope)],
+                    [{field: current[field] for field in ("id", "version", "body")}],
+                )
             db.execute(update(policy_documents).where(
                 policy_documents.c.id == CURRENT_POLICIES["hotel"]["id"]
             ).values(body="unreviewed change"))
@@ -138,8 +140,10 @@ class CityProductTests(unittest.TestCase):
         for rule in CURRENT_POLICIES.values():
             self.assertIn(rule["id"], text)
             self.assertIn(rule["body"], text)
-        self.assertIn("flight-actions-demo-v3", lookup_policy.invoke("机票取消政策"))
-        self.assertNotIn("order_faq.md", lookup_policy.invoke("酒店政策"))
+        self.assertEqual(CURRENT_POLICIES["flight"]["version"], 3)
+        self.assertEqual(CURRENT_POLICIES["hotel"]["version"], 4)
+        self.assertEqual(CURRENT_POLICIES["rental"]["version"], 3)
+        self.assertNotIn("order_faq.md", text)
         engine.dispose()
 
 

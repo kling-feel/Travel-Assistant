@@ -93,7 +93,8 @@ def build(source: Path, output: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=ROOT / "travel_new.sqlite")
+    parser.add_argument("--source", type=Path,
+                        default=ROOT / "data" / "source" / "travel_new.sqlite")
     parser.add_argument("--output", type=Path, default=ROOT / "data" / "fixtures" / "demo_source.sqlite")
     args = parser.parse_args()
     if not args.source.is_file():
