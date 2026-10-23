@@ -101,6 +101,27 @@ def _fresh_flight_candidates(state, task):
     return rows if all(saved.get(key) == current[key] for key in current) else []
 
 
+def _offer_scope(kind, params):
+    keys = (("city", "airport", "check_in", "check_out") if kind == "hotel" else
+            ("city", "airport", "pickup_date", "drop_off_date"))
+    return {key: params.get(key) for key in keys}
+
+
+def _fresh_offer_candidates(state, kind, task):
+    rows = (state.get("candidates") or {}).get(kind) or []
+    saved = (state.get("candidate_scopes") or {}).get(kind) or {}
+    if not rows or not saved or not isinstance(task, dict):
+        return []
+    try:
+        observed = datetime.fromisoformat(saved["observed_at"])
+    except (KeyError, TypeError, ValueError):
+        return []
+    if observed.tzinfo is None or not timedelta(0) <= datetime.now(timezone.utc) - observed <= timedelta(minutes=15):
+        return []
+    return rows if all(saved.get(key) == value for key, value in
+                       _offer_scope(kind, task).items()) else []
+
+
 def _safe_general(draft):
     if (not isinstance(draft, str) or not 1 <= len(draft.strip()) <= 500
             or re.search(r"\d|已预订|已改签|已取消|付款成功|退款成功|票价|航司政策|开放时间", draft)):
@@ -183,10 +204,16 @@ def build_graph(model, read_evidence, checkpointer):
         location = state.get("location_context") or {}
         base = local_today()
         writes = requested_actions(user_text)
-        flight_seed = (flight_task if flight_followup(user_text, flight_task)
-                       else prior_context)
+        if re.search(r"租车|取车|还车|车辆|辆车|台车|订车", user_text):
+            task_seed = tasks.get("rental_search") or prior_context
+        elif re.search(r"酒店|住宿|房间|房型|订房|住两晚", user_text):
+            task_seed = tasks.get("hotel_search") or prior_context
+        elif flight_followup(user_text, flight_task):
+            task_seed = flight_task
+        else:
+            task_seed = prior_context
         direct_intent, direct_params, direct_context = read_request(
-            user_text, "general", {}, flight_seed, base)
+            user_text, "general", {}, task_seed, base)
         discovery = dict(tasks.get("trip_discovery") or {})
         places = mentioned_cities(user_text)
         destination_open = bool(re.search(r"哪里|去哪|什么地方|一个地方|目的地|风景|景色|适合.{0,6}地方", user_text))
@@ -348,10 +375,18 @@ def build_graph(model, read_evidence, checkpointer):
             explicit = mentioned_cities(user_text)
             current, destination = location.get("current_city"), location.get("destination_city")
             if landing:
-                flight_candidates = (state.get("candidates") or {}).get("flight", [])
+                flight_candidates = _fresh_flight_candidates(state, flight_task)
                 if not flight_candidates:
                     flight_candidates = read_evidence("landing_context", {})["references"]
                 selected = _chosen_landing(flight_candidates, user_text)
+                if not selected and not re.search(r"SIM-\d+|第\s*[一二三123]\s*(?:个|班|趟)?", user_text, re.I):
+                    cards = read_evidence("memory_cards", {}).get("cards", [])
+                    pending_ids = {card.get("parameters", {}).get("flight_id")
+                                   for card in cards if card.get("status") == "pending"
+                                   and card.get("action_type") == "flight_book"}
+                    if len(pending_ids) == 1:
+                        selected = next((item for item in flight_candidates
+                                         if item.get("id") in pending_ids), None)
                 if not selected and not re.search(r"SIM-\d+|第\s*[一二三123]\s*(?:个|班|趟)?", user_text, re.I):
                     hotel_task = (state.get("task_contexts") or {}).get("hotel_search") or {}
                     landing_id = hotel_task.get("_landing_flight_id")
@@ -375,6 +410,8 @@ def build_graph(model, read_evidence, checkpointer):
                         hotel["check_in"] = (dates[0].isoformat() if dates
                                              else selected["arrival_date"])
                     nights = stay_nights(user_text, dates)
+                    if nights and not dates and not hotel.get("check_in"):
+                        hotel["check_in"] = selected["arrival_date"]
                     if nights and hotel.get("check_in"):
                         hotel["nights"] = nights
                         hotel["check_out"] = (date.fromisoformat(hotel["check_in"])
@@ -409,9 +446,11 @@ def build_graph(model, read_evidence, checkpointer):
             return {"intent": "hotel_search", "params": hotel,
                     "context": hotel, "task_contexts": tasks, "draft": ""}
         hotel_task = (state.get("task_contexts") or {}).get("hotel_search") or {}
+        landing_nights = stay_nights(user_text, mentioned_dates(user_text, base))
         if (hotel_task.get("_landing_flight_id") and
-                re.search(r"(?:到达|落地)(?:当|那)天.{0,6}(?:入住|住)|"
-                          r"(?:入住|住).{0,6}(?:到达|落地)(?:当|那)天", user_text)
+                (re.search(r"(?:到达|落地)(?:当|那)天.{0,6}(?:入住|住)|"
+                           r"(?:入住|住).{0,6}(?:到达|落地)(?:当|那)天", user_text)
+                 or landing_nights and not mentioned_dates(user_text, base))
                 and not writes):
             latest_flights = (state.get("candidates") or {}).get("flight", [])
             if latest_flights and not any(
@@ -421,11 +460,10 @@ def build_graph(model, read_evidence, checkpointer):
                         "刚查询的航班已变化；请重新选择班次，再确认落地酒店日期。"}
             hotel = dict(hotel_task)
             hotel["check_in"] = hotel["suggested_check_in"]
-            nights = stay_nights(user_text, mentioned_dates(user_text, base))
-            if nights:
-                hotel["nights"] = nights
+            if landing_nights:
+                hotel["nights"] = landing_nights
                 hotel["check_out"] = (date.fromisoformat(hotel["check_in"]) +
-                                      timedelta(days=nights)).isoformat()
+                                      timedelta(days=landing_nights)).isoformat()
             tasks = dict(state.get("task_contexts") or {})
             tasks["hotel_search"] = hotel
             return {"intent": "hotel_search", "params": hotel, "context": hotel,
@@ -458,7 +496,7 @@ def build_graph(model, read_evidence, checkpointer):
             return {"intent": direct_intent, "params": direct_params,
                     "context": direct_context, "task_contexts": tasks, "draft": ""}
         if (not writes and direct_intent == "rental_search"
-                and re.search(r"\d{1,2}(?::\d{2}|点)", user_text)
+                and re.search(r"\d{1,2}\s*(?::\s*\d{2}|点)", user_text)
                 and re.search(r"取|还", user_text)):
             tasks = dict(state.get("task_contexts") or {})
             tasks["rental_search"] = direct_context
@@ -565,6 +603,11 @@ def build_graph(model, read_evidence, checkpointer):
             queries = params.get("queries", []) if intent == "transaction" else []
             if not isinstance(queries, list):
                 queries = []
+            allowed_reads = {f"{kind.split('_')[0]}_search" for kind in writes}
+            if "flight_book" in writes and re.search(r"酒店|住宿|订房", user_text):
+                allowed_reads.add("hotel_search")
+            queries = [query for query in queries if isinstance(query, dict)
+                       and query.get("intent") in allowed_reads]
             if ("flight_book" in writes
                     and re.search(r"(?:顺便|再|同时).{0,8}(?:找|查|看看).{0,18}酒店", user_text)
                     and not any(isinstance(query, dict) and query.get("intent") == "hotel_search"
@@ -577,15 +620,16 @@ def build_graph(model, read_evidence, checkpointer):
             intent = "transaction"
         if intent != "transaction":
             intent, params, context = read_request(user_text, intent, params,
-                                                   flight_seed, base)
+                                                   task_seed, base)
         else:
             context = (direct_context if direct_intent in
                        ("hotel_search", "rental_search", "flight_search") else prior_context)
         tasks = dict(state.get("task_contexts") or {})
         if intent in ("flight_search", "hotel_search", "rental_search"):
             tasks[intent] = context
-        elif intent == "transaction" and direct_intent == "flight_search":
-            tasks["flight_search"] = direct_context
+        elif intent == "transaction" and direct_intent in (
+                "flight_search", "hotel_search", "rental_search"):
+            tasks[direct_intent] = direct_context
         return {"intent": intent, "params": params, "context": context,
                 "task_contexts": tasks,
                 "draft": draft or ""}
@@ -707,7 +751,10 @@ def build_graph(model, read_evidence, checkpointer):
                             "candidate_scopes": scopes,
                             "location_context": location,
                             "task_contexts": tasks}
-                return {**result, "candidates": groups}
+                kind = intent.split("_")[0]
+                scopes[kind] = {**_offer_scope(kind, params),
+                                "observed_at": datetime.now(timezone.utc).isoformat()}
+                return {**result, "candidates": groups, "candidate_scopes": scopes}
             return result
         return node
 
@@ -725,6 +772,9 @@ def build_graph(model, read_evidence, checkpointer):
         tasks = dict(state.get("task_contexts") or {})
         if not _fresh_flight_candidates(state, tasks.get("flight_search") or {}):
             groups.pop("flight", None)
+        for kind in ("hotel", "rental"):
+            if not _fresh_offer_candidates(state, kind, tasks.get(f"{kind}_search") or {}):
+                groups.pop(kind, None)
         for query in queries[:2]:
             if not isinstance(query, dict) or query.get("intent") not in (
                     "itinerary", "flight_search", "hotel_search", "rental_search"):
@@ -785,6 +835,12 @@ def build_graph(model, read_evidence, checkpointer):
                                     "observed_at": datetime.now(timezone.utc).isoformat()}
                 tasks["flight_search"] = {**tasks.get("flight_search", {}),
                                           "intent": "flight_search", **query_params}
+            elif query["intent"] in ("hotel_search", "rental_search"):
+                kind = query["intent"].split("_")[0]
+                scopes[kind] = {**_offer_scope(kind, query_params),
+                                "observed_at": datetime.now(timezone.utc).isoformat()}
+                tasks[query["intent"]] = {**tasks.get(query["intent"], {}),
+                                           "intent": query["intent"], **query_params}
             if query["intent"] == "hotel_search" and query_params.get("_landing_flight_id"):
                 tasks["hotel_search"] = {"intent": "hotel_search", **query_params,
                                           "suggested_check_in": selected["arrival_date"]}

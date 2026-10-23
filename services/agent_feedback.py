@@ -165,7 +165,7 @@ def cancellation_overview(db, traveler_id, text=None):
             if eligible_now:
                 eligible.append({"action_type": f"{kind}_cancel",
                                  "parameters": {"order_id": order["id"]}})
-            lines.append(f"{identity}：{detail}{'，需逐笔确认' if eligible_now else ''}。")
+            lines.append(f"{identity}：{detail}。")
     if ambiguous:
         return "\n".join([*retained, *ambiguous, "请先确认这些跨城订单的去留；目前没有生成取消卡。"]), []
     if not lines and not retained:

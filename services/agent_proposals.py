@@ -53,7 +53,9 @@ def _explicit_id(text, kind, candidate_id):
     if kind == "flight":
         return re.search(rf"(?:SIM-|航班\s*ID\s*[:：]?\s*){candidate_id}\b",
                          text, re.IGNORECASE) is not None
-    return isinstance(candidate_id, str) and len(candidate_id) > 5 and candidate_id in text
+    return (isinstance(candidate_id, str) and len(candidate_id) > 5 and
+            re.search(rf"(?<![A-Za-z0-9-]){re.escape(candidate_id)}(?![A-Za-z0-9-])",
+                      text) is not None)
 
 
 def _product_choice(kind, proposed, groups, text, grounded_context=None):
@@ -66,6 +68,8 @@ def _product_choice(kind, proposed, groups, text, grounded_context=None):
     if proposed is not None and proposed not in ids:
         raise SelectionNeeded("该产品不在当前候选中，请重新查询并选择。")
     ordinal = _ordinal(text, kind)
+    explicit = [candidate_id for candidate_id in ids
+                if _explicit_id(text, kind, candidate_id)]
     if ordinal is not None:
         if ordinal >= len(ids):
             raise SelectionNeeded("所选序号不在当前候选中，请重新选择。")
@@ -85,6 +89,8 @@ def _product_choice(kind, proposed, groups, text, grounded_context=None):
         choice = marked[0]["id"]
     elif len(ids) == 1 and re.search(r"这个|这班|这家|这辆|前面|刚才|上面|那个|那班|那家|就它|就这", text):
         choice = ids[0]
+    elif len(explicit) == 1:
+        choice = explicit[0]
     elif "最便宜" in text:
         priced = [item for item in candidates if type(item.get("price")) in (int, float)]
         if len(priced) != len(candidates):

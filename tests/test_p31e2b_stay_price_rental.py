@@ -1,22 +1,60 @@
 """Hotel nights, global price choice and grounded rental times."""
 
 import unittest
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
 from sqlalchemy import insert, select, update
 
-from db.travel_models import (airports, hotel_orders, hotel_products, hotels,
+from db.travel_models import (airports, flight_offers, flights, hotel_orders, hotel_products, hotels,
                               pending_actions, policy_documents, rental_orders,
                               rental_products)
 from services.dialogue_context import read_request, rental_clocks
 from services.agent_proposals import SelectionNeeded, prepare_actions
 from services.policy_catalog import CURRENT_POLICIES
 from services.travel import find_hotels, find_rentals
+from graph_chat.controlled import _fresh_offer_candidates
 from tests import test_p26a_dialogue as dialogue_cases
 
 
+class _FixedActionClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        instant = datetime(2026, 10, 22, 1, tzinfo=timezone.utc)
+        return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+
+
 class StayPriceRentalTests(unittest.TestCase):
+    def test_offer_candidate_requires_fresh_matching_scope(self):
+        task = {"city": "Shanghai", "pickup_date": "2026-10-24",
+                "drop_off_date": "2026-10-26"}
+        state = {"candidates": {"rental": [{"id": "rental-SHA-13"}]},
+                 "candidate_scopes": {"rental": {**task, "airport": None,
+                     "observed_at": datetime.now(timezone.utc).isoformat()}}}
+        self.assertEqual(len(_fresh_offer_candidates(state, "rental", task)), 1)
+        self.assertEqual(_fresh_offer_candidates(state, "rental", {**task,
+            "city": "London"}), [])
+        state["candidate_scopes"]["rental"]["observed_at"] = (
+            datetime.now(timezone.utc) - timedelta(minutes=16)).isoformat()
+        self.assertEqual(_fresh_offer_candidates(state, "rental", task), [])
+
+    def test_model_cannot_turn_rental_booking_into_flight_booking(self):
+        model = dialogue_cases.ScriptedModel({"intent": "transaction", "params": {
+            "actions": [{"action_type": "flight_book", "parameters": {"flight_id": 901}}]},
+            "answer": ""})
+        client, model_patch, saver_patch = self.fixture.client(model)
+        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+                                            return_value=date(2026, 10, 23)), client:
+            auth = self.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            response = self.fixture.turn(client, sid, auth, "h3-wrong-domain",
+                                         "预订这辆车 rental-SHA-13，明天 10 点取车，大后天 18 点还车")
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(len(model.history_lengths), 1)
+            self.assertEqual(response.json()["actions"], [])
+            self.assertFalse(any(row.get("type") == "flight"
+                                 for row in response.json()["references"]))
+
     def setUp(self):
         self.fixture = dialogue_cases.DialogueTests("runTest")
         self.fixture.setUp()
@@ -66,6 +104,69 @@ class StayPriceRentalTests(unittest.TestCase):
         self.assertTrue(conflict["date_conflict"])
         self.assertEqual(rental_clocks("明天上午10点取车，大后天下午6点还车"),
                          {"pickup_clock": "10:00", "dropoff_clock": "18:00"})
+        self.assertEqual(rental_clocks("明天 10 点取车，大后天 18 点还车"),
+                         {"pickup_clock": "10:00", "dropoff_clock": "18:00"})
+
+    def test_rental_booking_does_not_reuse_old_flight_candidates(self):
+        with self.fixture.engine.begin() as db:
+            db.execute(insert(flights).values(
+                id=901, flight_no="SIM-901", departure_airport="SHA",
+                arrival_airport="BSL", status="Scheduled",
+                departure_at=datetime(2026, 10, 25, 2, tzinfo=timezone.utc),
+                arrival_at=datetime(2026, 10, 25, 15, tzinfo=timezone.utc)))
+            db.execute(insert(flight_offers).values(
+                flight_id=901, amount=6000, version=1, rule_id="network-fare-v1"))
+        wrong_model = dialogue_cases.ScriptedModel(
+            {"intent": "flight_search", "params": {}, "answer": ""},
+            {"intent": "transaction", "params": {
+            "actions": [{"action_type": "flight_book", "parameters": {"flight_id": 901}}],
+            "queries": [{"intent": "flight_search", "params": {
+                "departure": "Shanghai", "arrival": "Basel",
+                "travel_date": "2026-10-25"}}]}, "answer": ""})
+        client, model_patch, saver_patch = self.fixture.client(wrong_model)
+        with (model_patch, saver_patch,
+              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 23)),
+              patch("api.travel.local_today", return_value=date(2026, 10, 23)),
+              patch("services.actions.datetime", _FixedActionClock), client):
+            auth = self.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            flight = self.fixture.turn(client, sid, auth, "h3-flight-01",
+                                       "查10月25日从上海到巴塞尔的航班")
+            self.assertTrue(any(row["type"] == "flight" for row in flight.json()["references"]))
+            rental = self.fixture.turn(client, sid, auth, "h3-rental-01",
+                                       "我想在上海租车，明天 10 点取车，大后天 18 点还车")
+            self.assertIn("10:00", rental.json()["answer"])
+            self.assertIn("18:00", rental.json()["answer"])
+            self.assertNotIn("请补充取车", rental.json()["answer"])
+            ranked = self.fixture.turn(client, sid, auth, "h3-rental-02",
+                                       "选最贵的那辆车")
+            self.assertIn("rental-SHA-13", ranked.json()["answer"])
+            natural = self.fixture.turn(client, sid, auth, "h3-rental-03",
+                                        "预订刚才最贵的那辆车，明天 10 点取车，大后天 18 点还车")
+            self.assertEqual([row["action_type"] for row in natural.json()["actions"]],
+                             ["rental_book"], natural.json()["answer"])
+            self.assertNotIn("SIM-901", natural.json()["answer"])
+            booked = self.fixture.turn(client, sid, auth, "h3-rental-04",
+                                       "预订这辆车 rental-SHA-13，按 10:00 取、18:00 还")
+            self.assertEqual(booked.status_code, 200, booked.text)
+            self.assertEqual(len(booked.json()["actions"]), 1, booked.json()["answer"])
+            self.assertEqual(booked.json()["actions"][0]["action_type"], "rental_book")
+            self.assertEqual(booked.json()["actions"][0]["parameters"]["product_id"],
+                             "rental-SHA-13")
+            self.assertNotIn("SIM-901", booked.json()["answer"])
+            self.assertFalse(any(row.get("type") == "flight"
+                                 for row in booked.json()["references"]))
+            changed_city = self.fixture.turn(client, sid, auth, "h3-rental-city",
+                                             "我改在伦敦租车，预订刚才最贵的那辆车")
+            self.assertEqual(changed_city.json()["actions"], [])
+            self.assertFalse(any(row.get("id") == "rental-SHA-13"
+                                 for row in changed_city.json()["references"]))
+            another_sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            isolated = self.fixture.turn(client, another_sid, auth, "h3-rental-05",
+                                         "预订刚才最贵的那辆车")
+            self.assertEqual(isolated.json()["actions"], [])
+        with self.fixture.engine.connect() as db:
+            self.assertEqual(db.execute(select(rental_orders.c.id)).all(), [])
 
     def test_full_scope_price_sort(self):
         with self.fixture.engine.connect() as db:
@@ -122,7 +223,8 @@ class StayPriceRentalTests(unittest.TestCase):
         with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
                                             return_value=date(2026, 10, 22)), patch(
                                                 "api.travel.local_today",
-                                                return_value=date(2026, 10, 22)), client:
+                                                return_value=date(2026, 10, 22)), patch(
+                                                    "services.actions.datetime", _FixedActionClock), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             first = self.fixture.turn(client, sid, auth, "rental-e2b-1",
@@ -150,7 +252,8 @@ class StayPriceRentalTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
         with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
-                                            return_value=date(2026, 10, 22)), client:
+                                            return_value=date(2026, 10, 22)), patch(
+                                                "services.actions.datetime", _FixedActionClock), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             for key, prompt in (("rental-split-1", "我在上海租车，明天取大后天还"),

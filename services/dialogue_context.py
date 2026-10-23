@@ -16,7 +16,7 @@ _WRITE = re.compile(r"预订|预定|下单|订票|订.{0,10}(?:机票|航班|酒
 _NUMBER = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6,
            "七": 7, "八": 8, "九": 9, "十": 10}
 _NIGHTS = re.compile(r"(?:住|订|预订|预定)?\s*([一二两三四五六七八九十\d]{1,2})\s*晚")
-_CLOCK = re.compile(r"(凌晨|早上|上午|中午|下午|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|点(半|\d{1,2}分?)?)")
+_CLOCK = re.compile(r"(凌晨|早上|上午|中午|下午|晚上)?\s*(\d{1,2})\s*(?:[:：]\s*(\d{2})|点\s*(半|\d{1,2}分?)?)")
 
 
 def requested_actions(text: str) -> list[str]:
@@ -28,7 +28,7 @@ def requested_actions(text: str) -> list[str]:
         return []
     domains = [("flight", r"机票|航班|班机|班次|订票|(?:最早|最便宜|那|这|前面|刚才).{0,4}班"),
                ("hotel", r"酒店|房间|房型|住宿|订房"),
-               ("rental", r"租车|车辆|车子|订车")]
+               ("rental", r"租车|车辆|车子|辆车|台车|订车")]
     actions = []
     segments = re.split(r"[，,；;]|并且|同时|顺便|然后|再|和(?=订|预订|预定|取消|改期|改签)", text)
     for segment in segments:
@@ -55,7 +55,7 @@ def flight_followup(text: str, previous: dict) -> bool:
     """A short flight follow-up may resume its own task after another read topic."""
     if not isinstance(previous, dict) or previous.get("intent") != "flight_search":
         return False
-    if re.search(r"天气|景点|游览|推荐|酒店|住宿|租车|政策|规则|取消|改签", text):
+    if re.search(r"天气|景点|游览|推荐|酒店|住宿|租车|车辆|辆车|台车|取车|还车|订车|政策|规则|取消|改签", text):
         return False
     return bool(re.search(r"机票|航班|班次|起飞|飞往|出发|最早|这班|那班|前面|刚才", text)
                 or mentioned_cities(text) and re.search(r"(?:想|要|打算)?去|(?:从|在).{0,16}出发", text))
@@ -77,6 +77,8 @@ def mentioned_cities(text: str) -> list[str]:
             found.append((text.index(name), -len(name), code))
     for match in re.finditer(r"(?<![A-Za-z])[A-Z]{3}(?![A-Za-z])", text):
         if match.group() == "SIM" and text[match.end():match.end() + 1] == "-":
+            continue
+        if re.search(r"(?:rental|room)-$", text[:match.start()], re.I):
             continue
         found.append((match.start(), -3, match.group()))
     for city in set(_ALIASES.values()):
@@ -218,7 +220,7 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
                                 ("departure", "arrival", "travel_date")},
                               "hotel": {key: context.get(key) for key in
                                 ("city", "check_in", "check_out")}}, context
-    rental = bool(re.search(r"租车|取车|还车|车辆|租.{0,8}车", text))
+    rental = bool(re.search(r"租车|取车|还车|车辆|辆车|台车|租.{0,8}车", text))
     if previous.get("intent") == "rental_search" and rank and "车" in text:
         rental = True
     clocks = rental_clocks(text) if (rental or previous.get("intent") == "rental_search") else {}

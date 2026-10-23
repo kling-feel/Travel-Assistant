@@ -22,6 +22,14 @@ class RentalActionTests(ActionFixture):
     def setUp(self):
         super().setUp()
         self.zone = ZoneInfo("Europe/Zurich")
+        # Keep fixed-price assertions away from DST transitions; that edge is
+        # covered explicitly by test_time_validation_and_24_hour_billing.
+        self.check_in = self.now.date() + timedelta(days=1)
+        while len({datetime.combine(self.check_in + timedelta(days=offset),
+                                    time(12), self.zone).utcoffset()
+                   for offset in (0, 1, 2)}) != 1:
+            self.check_in += timedelta(days=1)
+        self.check_out = self.check_in + timedelta(days=1)
         self.pickup = datetime.combine(self.check_in, time(12)).isoformat()
         self.dropoff = datetime.combine(self.check_out, time(12)).isoformat()
         with self.engine.begin() as db:

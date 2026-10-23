@@ -126,6 +126,39 @@ class LocationJourneyTests(unittest.TestCase):
                                          "找 SIM-3831 落地附近的酒店")
             self.assertIn("伦敦盖特威克机场", selected.json()["answer"])
 
+    def test_pending_flight_card_and_two_nights_complete_landing_hotel_query(self):
+        with self.fixture.engine.begin() as db:
+            db.execute(insert(flights).values(
+                id=3832, flight_no="SIM-3832", departure_airport="SHA",
+                arrival_airport="LGW", status="Scheduled",
+                departure_at=datetime(2026, 10, 25, 3, tzinfo=timezone.utc),
+                arrival_at=datetime(2026, 10, 25, 16, tzinfo=timezone.utc)))
+            db.execute(insert(flight_offers).values(
+                flight_id=3832, amount=6900, version=1,
+                rule_id="network-fare-v1"))
+        model = dialogue_cases.ScriptedModel(
+            {"intent": "flight_search", "params": {}, "answer": ""},
+            {"intent": "transaction", "params": {"actions": [{
+                "action_type": "flight_book", "parameters": {"flight_id": 3831}}]},
+             "answer": ""})
+        client, patches = self._start(model)
+        with patches[0], patches[1], patches[2], patches[3], client:
+            auth = self.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            self.fixture.turn(client, sid, auth, "landing-card-01",
+                              "查10月25日从上海到伦敦的航班")
+            booked = self.fixture.turn(client, sid, auth, "landing-card-02",
+                                       "预订航班 SIM-3831")
+            self.assertEqual(len(booked.json()["actions"]), 1, booked.text)
+            hotel = self.fixture.turn(client, sid, auth, "landing-card-03",
+                                      "顺便找落地附近的酒店，住两晚")
+            self.assertEqual(hotel.status_code, 200, hotel.text)
+            self.assertIn("伦敦盖特威克机场", hotel.json()["answer"])
+            self.assertIn("2026-10-27", hotel.json()["answer"])
+            self.assertIn("room-LGW-1", hotel.json()["answer"])
+            self.assertNotIn("选择班次", hotel.json()["answer"])
+            self.assertEqual(hotel.json()["actions"], [])
+
     def test_wrong_explicit_flight_id_never_borrows_unique_candidate(self):
         model = dialogue_cases.ScriptedModel(
             {"intent": "general", "params": {}, "answer": ""})

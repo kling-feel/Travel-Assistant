@@ -33,7 +33,7 @@ from services.actions import (ActionError, ActionNotFound, create_proposal,
                               get_proposal, list_proposals)
 from services.confirmations import confirm_action, reject_action, list_action_history
 from services.agent_reads import demo_date, read_action_guidance, read_for_assistant
-from services.dialogue_context import local_today
+from services.dialogue_context import local_today, requested_actions
 from services.chat_turns import (TurnConflict, _public as public_turn, begin_turn,
                                  fail_turn, finish_turn, get_turn, latest_turn, has_graph_turns,
                                  lock_processing_turn)
@@ -486,6 +486,12 @@ def _process_turn(session_id, data, traveler_id, session, progress=None):
             progress("verifying")
         if plans:
             try:
+                explicit_actions = requested_actions(content)
+                if explicit_actions and any(
+                        not isinstance(plan, dict) or
+                        plan.get("action_type") not in explicit_actions
+                        for plan in plans):
+                    raise SelectionNeeded("本轮订单业务与旅客明确要求不一致，请重新核对对象。")
                 lock_processing_turn(session, traveler_id, session_id, turn["id"])
                 candidates = result.get("candidates") or {}
                 flight_task = (result.get("task_contexts") or {}).get("flight_search") or {}
@@ -513,11 +519,20 @@ def _process_turn(session_id, data, traveler_id, session, progress=None):
                     actions.append(jsonable_encoder(card))
                 references = references + [{"type": "action", "id": card["id"]}
                                            for card in actions]
-                read_answer = answer if result.get("params", {}).get("queries") else ""
+                queried = [item.get("intent", "").split("_")[0]
+                           for item in (result.get("params", {}).get("queries") or [])
+                           if isinstance(item, dict)]
+                action_kinds = {kind.split("_")[0] for kind, _ in resolved}
+                read_answer = (answer if not mass_cancel and any(
+                    kind not in action_kinds for kind in queried) else "")
                 card_notice = (f"沿用已有的 {reused_count} 张待确认卡。" if reused_count == len(actions)
                                else f"已生成 {len(actions) - reused_count} 张待确认卡，"
                                     f"沿用已有 {reused_count} 张。" if reused_count else
                                     f"已生成 {len(actions)} 张待确认卡。")
+                if mass_cancel:
+                    overview = overview.replace("订单尚未改变；本轮可办理的项目仍须逐张确认。", "").rstrip()
+                    if "本轮仅为" in overview:
+                        card_notice = ""
                 answer = (overview + "\n" if overview else "") + (
                           card_notice +
                           "请在下方逐张核对对象、时间、金额和政策，再选择确认或放弃。"
