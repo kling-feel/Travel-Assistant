@@ -327,7 +327,7 @@ def build_graph(model, read_evidence, checkpointer):
                         "draft": f"已记下从{city_zh(discovery['origin'])}出发。请告诉我出行日期。"}
             return {"intent": "trip_discovery", "params": discovery,
                     "task_contexts": tasks, "draft": ""}
-        if discovery.get("options"):
+        if discovery.get("options") and not re.search(r"推荐|景点|好玩|经典地点|游览", user_text):
             chosen = [item for item in discovery["options"] if item["city"] in places]
             if not chosen and len(places) == 1 and places[0] != discovery.get("origin"):
                 chosen = [{"city": places[0]}]
@@ -383,7 +383,7 @@ def build_graph(model, read_evidence, checkpointer):
                      "rental" if re.search(r"租车|车辆", user_text) else None)
             if scope:
                 return {"intent": "policy", "params": {"scope": scope}, "draft": ""}
-        landing = bool(re.search(r"落地|到达后|目的地", user_text))
+        landing = bool(re.search(r"落地|到达后|到达.{0,12}(?:当天|那天|当日)|目的地", user_text))
         nearby = any(word in user_text for word in ("附近", "周边", "周围")) or landing
         lodging = bool(re.search(r"酒店|住宿|住哪|订房", user_text))
         sight = bool(re.search(r"景点|经典地点|游览|好玩的地方|好看的地方", user_text))
@@ -395,6 +395,9 @@ def build_graph(model, read_evidence, checkpointer):
                 if not flight_candidates:
                     flight_candidates = read_evidence("landing_context", {})["references"]
                 selected = _chosen_landing(flight_candidates, user_text)
+                if not selected and explicit:
+                    owned = read_evidence("landing_context", {"city": explicit[-1]})["references"]
+                    selected = _chosen_landing(owned, user_text)
                 if not selected and not re.search(r"SIM-\d+|第\s*[一二三123]\s*(?:个|班|趟)?", user_text, re.I):
                     cards = read_evidence("memory_cards", {}).get("cards", [])
                     pending_ids = {card.get("parameters", {}).get("flight_id")
@@ -418,7 +421,7 @@ def build_graph(model, read_evidence, checkpointer):
                              "suggested_check_in": selected["arrival_date"],
                              "sort": "distance"}
                     dates = mentioned_dates(user_text, base)
-                    same_day = bool(re.search(r"(?:落地|到达)(?:当|那)天", user_text))
+                    same_day = bool(re.search(r"落地(?:当|那)天|到达.{0,12}(?:当|那)天", user_text))
                     if same_day and dates and dates[0].isoformat() != selected["arrival_date"]:
                         return {"intent": "general", "params": {}, "draft":
                                 "你说的落地当天与已核对航班的当地到达日不一致，请确认入住日期。"}

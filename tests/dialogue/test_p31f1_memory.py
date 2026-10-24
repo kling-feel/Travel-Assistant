@@ -12,7 +12,7 @@ from travel_assistant.services.dialogue_context import read_request
 from travel_assistant.services.model_config import ModelUnavailable
 from travel_assistant.services.travel import find_earliest_flights
 from tests.dialogue.test_p26a_dialogue import ScriptedModel
-from tests.dialogue.test_p31e2a_earliest import EarliestJourneyTests, NOW
+from tests.dialogue.test_p31e2a_earliest import EarliestJourneyTests, NOW, _FixedActionClock
 
 
 class WorkMemoryTests(unittest.TestCase):
@@ -51,6 +51,8 @@ class WorkMemoryTests(unittest.TestCase):
         original = find_earliest_flights
         return (client, model_patch, saver_patch,
                 patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
+                patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 21)),
+                patch("travel_assistant.services.actions.datetime", _FixedActionClock),
                 patch("travel_assistant.services.agent_reads.find_earliest_flights",
                       side_effect=lambda db, deps, arrs, **kwargs: original(
                           db, deps, arrs, now=NOW, **kwargs)))
@@ -65,8 +67,8 @@ class WorkMemoryTests(unittest.TestCase):
         model = ScriptedModel(*(
             {"intent": "general", "params": {}, "answer": "你好，我是旅行助手。"}
             for _ in range(22)))
-        client, model_patch, saver_patch, clock_patch, search_patch = self._test_context(model)
-        with model_patch, saver_patch, clock_patch, search_patch, client:
+        client, model_patch, saver_patch, clock_patch, api_clock_patch, action_clock_patch, search_patch = self._test_context(model)
+        with model_patch, saver_patch, clock_patch, api_clock_patch, action_clock_patch, search_patch, client:
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             first = self._turn(client, sid, auth, 1, "我要去伦敦旅行，帮我购买机票")
@@ -75,7 +77,7 @@ class WorkMemoryTests(unittest.TestCase):
             self.assertEqual(first["actions"], [])
             second = self._turn(client, sid, auth, 2,
                                 "我在上海明天就出发，没有的话就帮我预订最早的航班")
-            self.assertEqual(len(second["actions"]), 1)
+            self.assertEqual(len(second["actions"]), 1, second)
             card = second["actions"][0]
             self.assertEqual(card["parameters"]["flight_id"], 3832)
             recap = self._turn(client, sid, auth, 3, "我要去伦敦")
@@ -104,8 +106,8 @@ class WorkMemoryTests(unittest.TestCase):
         model = ScriptedModel(*([{"intent": "transaction", "params": {"actions": [
             {"action_type": "flight_book", "parameters": {"flight_id": 3832}}]},
             "answer": ""}] * 4))
-        client, model_patch, saver_patch, clock_patch, search_patch = self._test_context(model)
-        with model_patch, saver_patch, clock_patch, search_patch, client:
+        client, model_patch, saver_patch, clock_patch, api_clock_patch, action_clock_patch, search_patch = self._test_context(model)
+        with model_patch, saver_patch, clock_patch, api_clock_patch, action_clock_patch, search_patch, client:
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             first = self._turn(client, sid, auth, 21,
@@ -136,8 +138,8 @@ class WorkMemoryTests(unittest.TestCase):
                 "queries": [{"intent": "flight_search", "params": {
                     "departure": "Hamburg", "arrival": "Basel",
                     "travel_date": "2026-10-25"}}]}, "answer": ""})
-        client, model_patch, saver_patch, clock_patch, search_patch = self._test_context(model)
-        with model_patch, saver_patch, clock_patch, search_patch, client:
+        client, model_patch, saver_patch, clock_patch, api_clock_patch, action_clock_patch, search_patch = self._test_context(model)
+        with model_patch, saver_patch, clock_patch, api_clock_patch, action_clock_patch, search_patch, client:
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             self._turn(client, sid, auth, 31, "查10月25日从上海到伦敦的航班")

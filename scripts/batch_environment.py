@@ -6,6 +6,7 @@ from pathlib import Path
 from secrets import token_urlsafe
 import subprocess
 import sys
+from urllib.parse import urlparse
 
 from dotenv import dotenv_values
 
@@ -56,6 +57,32 @@ def run(path: Path, command: list[str]):
     return subprocess.run(command, env=environment, check=False).returncode
 
 
+def run_paid(path: Path, command: list[str]):
+    """Start the 5438 acceptance batch with explicit local paid credentials."""
+    if not command:
+        raise ValueError("Command is required after --")
+    values = dotenv_values(path)
+    if (path.name != "p33b-repeat.env" or set(values) != KEYS or
+            values.get("POSTGRES_PORT") != "5438" or values.get("PORT") != "8017" or
+            any(not value for value in values.values())):
+        raise ValueError("Paid mode is restricted to the isolated 5438 / 8017 batch")
+    paid = dotenv_values(ROOT / ".env")
+    base = urlparse(paid.get("AI_BASE_URL") or "")
+    if (paid.get("AI_PROVIDER") != "deepseek" or not paid.get("AI_MODEL") or
+            base.scheme != "https" or base.hostname != "api.deepseek.com" or
+            base.username or base.password or base.query or base.fragment or
+            not paid.get("AI_API_KEY") or not paid.get("ALIYUN_IQS_API_KEY")):
+        raise ValueError("Local DeepSeek or search credentials are incomplete")
+    environment = os.environ.copy()
+    environment.update(values)
+    environment["DATABASE_URL"] = ""
+    for key in ("AI_PROVIDER", "AI_MODEL", "AI_BASE_URL", "AI_API_KEY",
+                "ALIYUN_IQS_API_KEY"):
+        environment[key] = paid[key]
+    environment["ALIYUN_IQS_ENABLED"] = "true"
+    return subprocess.run(command, env=environment, check=False).returncode
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_subparsers(dest="action", required=True)
@@ -66,6 +93,9 @@ def main():
     launch = actions.add_parser("run")
     launch.add_argument("path")
     launch.add_argument("command", nargs=argparse.REMAINDER)
+    paid = actions.add_parser("run-paid")
+    paid.add_argument("path")
+    paid.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     try:
         path = checked_path(args.path)
@@ -74,6 +104,8 @@ def main():
             print("Created ignored batch credentials")
             return
         command = args.command[1:] if args.command[:1] == ["--"] else args.command
+        if args.action == "run-paid":
+            raise SystemExit(run_paid(path, command))
         raise SystemExit(run(path, command))
     except (OSError, ValueError) as error:
         parser.error(str(error))

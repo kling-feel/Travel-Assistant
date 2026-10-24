@@ -49,6 +49,13 @@ class TransactionJourneyTests(unittest.TestCase):
         self.assertEqual(requested_actions("取消我的机票，并预订酒店"),
                          ["flight_cancel", "hotel_book"])
         self.assertEqual(requested_actions("取消机票，顺便找酒店"), ["flight_cancel"])
+        self.assertEqual(requested_actions("把我的酒店改到后天入住"), ["hotel_change"])
+        self.assertEqual(requested_actions("把我的机票改到后天"), ["flight_change"])
+        self.assertEqual(requested_actions("把租车改成后天下午取车"), ["rental_change"])
+        self.assertEqual(requested_actions("预订 rental-LGW-1，29日10点取车，31日18点还车"),
+                         ["rental_book"])
+        self.assertEqual(requested_actions("取消机票，并把酒店改到后天"),
+                         ["flight_cancel", "hotel_change"])
         intent, params, _ = read_request(
             "我要在上海租车，明天用大后天还车", "general", {},
             {"intent": "hotel_search", "city": "London"}, date(2026, 10, 21))

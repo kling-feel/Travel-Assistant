@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 from sqlalchemy import URL
 
 from scripts.import_network_data import assert_fresh_batch_target, seed_policies_match
-from scripts.batch_environment import GENERATED, checked_path, create, run
+from scripts.batch_environment import GENERATED, checked_path, create, run, run_paid
 from scripts.migrate import MIGRATIONS, assert_empty_batch_database
 from travel_assistant.services.policy_catalog import SEED_POLICIES
 
@@ -106,6 +106,52 @@ class FreshBatchGuardTests(unittest.TestCase):
         changed = [dict(row) for row in SEED_POLICIES]
         changed[0]["body"] += "unexpected"
         self.assertFalse(seed_policies_match(changed))
+
+    def test_paid_batch_uses_only_local_service_keys_and_isolated_database(self):
+        batch = {"POSTGRES_PASSWORD": "isolated", "POSTGRES_PORT": "5438",
+                 "JWT_SECRET_KEY": "isolated-jwt", "DEMO_TRAVELER_1_PASSWORD": "one",
+                 "DEMO_TRAVELER_2_PASSWORD": "two", "PORT": "8017",
+                 "ORIGINS": "http://127.0.0.1:8017"}
+        paid = {"AI_PROVIDER": "deepseek", "AI_MODEL": "deepseek-flash",
+                "AI_BASE_URL": "https://api.deepseek.com", "AI_API_KEY": "paid-model",
+                "ALIYUN_IQS_API_KEY": "paid-search"}
+        path = GENERATED / "p33b-repeat.env"
+        def values(path):
+            return batch if path.name == "p33b-repeat.env" else paid
+
+        with patch("scripts.batch_environment.dotenv_values", side_effect=values), \
+                patch("scripts.batch_environment.subprocess.run") as child, \
+                patch.dict(os.environ, {"DATABASE_URL": "postgresql://old",
+                                     "POSTGRES_PORT": "5433", "JWT_SECRET_KEY": "old"}):
+            child.return_value.returncode = 0
+            self.assertEqual(run_paid(path, ["python", "-V"]), 0)
+            environment = child.call_args.kwargs["env"]
+            self.assertEqual(environment["DATABASE_URL"], "")
+            self.assertEqual(environment["POSTGRES_PORT"], "5438")
+            self.assertEqual(environment["JWT_SECRET_KEY"], "isolated-jwt")
+            self.assertEqual(environment["AI_API_KEY"], "paid-model")
+            self.assertEqual(environment["ALIYUN_IQS_API_KEY"], "paid-search")
+            self.assertEqual(environment["ALIYUN_IQS_ENABLED"], "true")
+
+    def test_paid_batch_rejects_other_ports_and_model_hosts(self):
+        batch = {"POSTGRES_PASSWORD": "isolated", "POSTGRES_PORT": "5436",
+                 "JWT_SECRET_KEY": "isolated-jwt", "DEMO_TRAVELER_1_PASSWORD": "one",
+                 "DEMO_TRAVELER_2_PASSWORD": "two", "PORT": "8017",
+                 "ORIGINS": "http://127.0.0.1:8017"}
+        paid = {"AI_PROVIDER": "deepseek", "AI_MODEL": "deepseek-flash",
+                "AI_BASE_URL": "https://not-deepseek.example", "AI_API_KEY": "key",
+                "ALIYUN_IQS_API_KEY": "key"}
+        def values(path):
+            return batch if path.name == "p33b-repeat.env" else paid
+
+        with patch("scripts.batch_environment.dotenv_values", side_effect=values), \
+                patch("scripts.batch_environment.subprocess.run") as child:
+            with self.assertRaisesRegex(ValueError, "5438"):
+                run_paid(GENERATED / "p33b-repeat.env", ["python", "-V"])
+            batch["POSTGRES_PORT"] = "5438"
+            with self.assertRaisesRegex(ValueError, "credentials"):
+                run_paid(GENERATED / "p33b-repeat.env", ["python", "-V"])
+        child.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -150,10 +150,12 @@ def prepare():
             ("hotel_cancel", {}, "取消我的酒店"),
             ("rental_book", {"product_id": rental["id"],
                              "pickup_at": book_pickup, "dropoff_at": book_dropoff},
-             f"预订租车产品 {rental['id']}，{book_pickup} 取车，{book_dropoff} 还车"),
+             f"预订租车产品 {rental['id']}，{(pickup + timedelta(days=2)):%Y-%m-%d %H:%M} 取车，"
+             f"{(dropoff + timedelta(days=2)):%Y-%m-%d %H:%M} 还车"),
             ("rental_change", {"pickup_at": change_pickup,
                                "dropoff_at": change_dropoff},
-             f"把我的租车改成 {change_pickup} 取车，{change_dropoff} 还车"),
+             f"把我的租车改成 {(pickup + timedelta(days=1)):%Y-%m-%d %H:%M} 取车，"
+             f"{(dropoff + timedelta(days=1)):%Y-%m-%d %H:%M} 还车"),
             ("rental_cancel", {}, "取消我的租车"),
         ]
         decisions = [_decision((kind, params)) for kind, params, _ in cases]
@@ -195,7 +197,8 @@ def prepare():
                                    json={"content": "split"}).status_code == 409
         assert len(model.decisions) == 0
         during = _counts()
-        assert during["pending_actions"] == 11 and during["chat_turns"] == 11
+        assert during["pending_actions"] == 9 and during["chat_turns"] == 11, during
+        assert {card["id"] for card in dual["actions"]} == {cards[1], cards[3]}
         assert during["flight_orders"] == baseline["flight_orders"] + 1
         assert during["hotel_orders"] == baseline["hotel_orders"] + 1
         assert during["rental_orders"] == baseline["rental_orders"] + 1

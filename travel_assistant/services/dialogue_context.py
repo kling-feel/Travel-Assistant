@@ -12,7 +12,7 @@ _RELATIVE = re.compile(r"大后天|后天|明天|今天")
 _OFFSETS = {"今天": 0, "明天": 1, "后天": 2, "大后天": 3}
 _ABSOLUTE = re.compile(r"(?<!\d)(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?")
 _MONTH_DAY = re.compile(r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日")
-_WRITE = re.compile(r"预订|预定|下单|订票|订.{0,10}(?:机票|航班|酒店|房|车)|购买|买票|改签|改期|取消")
+_WRITE = re.compile(r"预订|预定|下单|订票|订.{0,10}(?:机票|航班|酒店|房|车)|购买|买票|改签|改期|改到|改成|取消")
 _NUMBER = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6,
            "七": 7, "八": 8, "九": 9, "十": 10}
 _NIGHTS = re.compile(r"(?:住|订|预订|预定)?\s*([一二两三四五六七八九十\d]{1,2})\s*晚")
@@ -28,18 +28,18 @@ def requested_actions(text: str) -> list[str]:
         return []
     domains = [("flight", r"机票|航班|班机|班次|订票|(?:最早|最便宜|那|这|前面|刚才).{0,4}班"),
                ("hotel", r"酒店|房间|房型|住宿|订房"),
-               ("rental", r"租车|车辆|车子|辆车|台车|订车")]
+               ("rental", r"租车|车辆|车子|辆车|台车|订车|取车|还车|rental-[A-Za-z0-9-]+")]
     actions = []
-    segments = re.split(r"[，,；;]|并且|同时|顺便|然后|再|和(?=订|预订|预定|取消|改期|改签)", text)
+    segments = re.split(r"[，,；;]|并且|同时|顺便|然后|再|和(?=订|预订|预定|取消|改期|改签|改到|改成)", text)
     for segment in segments:
         for kind, noun in domains:
             if not re.search(noun, segment):
                 continue
             if re.search(r"取消", segment) and not re.search(r"取消.{0,8}查询", segment):
                 operation = "cancel"
-            elif kind == "flight" and re.search(r"改签", segment):
+            elif kind == "flight" and re.search(r"改签|改到|改成", segment):
                 operation = "change"
-            elif kind != "flight" and re.search(r"改期|修改", segment):
+            elif kind != "flight" and re.search(r"改期|修改|改到|改成", segment):
                 operation = "change"
             elif re.search(r"预订|预定|下单|订票|订.{0,10}(?:机票|航班|酒店|房|车)|购买|买票", segment):
                 operation = "book"

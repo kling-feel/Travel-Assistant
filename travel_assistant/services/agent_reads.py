@@ -145,9 +145,11 @@ def read_for_assistant(db, traveler_id, intent, params):
                                      user_text=_as_text(params.get("_user_text"), 4000) or "")
     if intent == "landing_context":
         now = datetime.now(timezone.utc)
+        requested_city = _city(params.get("city"))
         orders = [item for item in itinerary(db, traveler_id)["flight_orders"]
                   if item["status"] == "confirmed" and item["arrival_at"].replace(
-                      tzinfo=item["arrival_at"].tzinfo or timezone.utc) > now]
+                      tzinfo=item["arrival_at"].tzinfo or timezone.utc) > now and
+                  (not requested_city or _airport(db, item["arrival_airport"])[2] == requested_city)]
         if len(orders) != 1:
             return _result("请先明确要乘坐的未来航班。")
         flight = orders[0]

@@ -18,6 +18,12 @@ from tests.dialogue import test_p31e1_transaction_journey as prior_cases
 NOW = datetime(2026, 10, 21, 4, tzinfo=timezone.utc)
 
 
+class _FixedActionClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+
+
 class EarliestJourneyTests(unittest.TestCase):
     def setUp(self):
         self.fixture = prior_cases.TransactionJourneyTests("runTest")
@@ -114,6 +120,8 @@ class EarliestJourneyTests(unittest.TestCase):
 
         with (model_patch, saver_patch,
               patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.services.actions.datetime", _FixedActionClock),
               patch("travel_assistant.services.agent_reads.find_earliest_flights", side_effect=fixed_search),
               client):
             auth = self.fixture.fixture.auth(client, "demo1", "password1")
@@ -160,6 +168,8 @@ class EarliestJourneyTests(unittest.TestCase):
 
         with (model_patch, saver_patch,
               patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.services.actions.datetime", _FixedActionClock),
               patch("travel_assistant.services.agent_reads.find_earliest_flights", side_effect=fixed_search),
               client):
             auth = self.fixture.fixture.auth(client, "demo1", "password1")
