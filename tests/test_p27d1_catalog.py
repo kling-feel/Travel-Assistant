@@ -7,9 +7,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from services.recommendation_geography import country_for_fixture_city
-from services.reviewed_places import places_for_city, reviewed_places
-from services.recommendations import _CITY_ALIASES, _explicit_city
+from travel_assistant.services.recommendation_geography import country_for_fixture_city
+from travel_assistant.services.reviewed_places import places_for_city, reviewed_places
+from travel_assistant.services.recommendations import _CITY_ALIASES, _explicit_city
 from scripts.verify_network_fixture import reachable_cities
 
 
@@ -40,7 +40,7 @@ class ReviewedPlacesTests(unittest.TestCase):
 
     def test_catalog_read_error_does_not_become_model_facts(self):
         reviewed_places.cache_clear()
-        with patch("services.reviewed_places._SOURCE") as source:
+        with patch("travel_assistant.services.reviewed_places._SOURCE") as source:
             source.open.side_effect = OSError("catalog missing")
             with self.assertRaises(OSError):
                 reviewed_places()
@@ -57,7 +57,7 @@ class ReviewedPlacesTests(unittest.TestCase):
             path = Path(directory) / "forged.psv"
             path.write_text(forged, encoding="utf-8")
             reviewed_places.cache_clear()
-            with patch("services.reviewed_places._SOURCE", path):
+            with patch("travel_assistant.services.reviewed_places._SOURCE", path):
                 with self.assertRaises(ValueError):
                     reviewed_places()
         reviewed_places.cache_clear()

@@ -3,7 +3,7 @@
 from langchain_openai import ChatOpenAI
 
 from travel_assistant.core.config import settings
-from services.answer_composer import ComposingModel
+from travel_assistant.services.answer_composer import ComposingModel
 
 
 class ModelUnavailable(RuntimeError):

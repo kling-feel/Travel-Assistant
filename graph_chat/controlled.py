@@ -9,15 +9,15 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
-from services.agent_feedback import bulk_cancellation_requested
-from services.dialogue_boundaries import boundary_intent
-from services.country_flights import country_in_text
-from services.dialogue_context import (declared_current_city, flight_followup, local_today,
+from travel_assistant.services.agent_feedback import bulk_cancellation_requested
+from travel_assistant.services.dialogue_boundaries import boundary_intent
+from travel_assistant.services.country_flights import country_in_text
+from travel_assistant.services.dialogue_context import (declared_current_city, flight_followup, local_today,
                                        mentioned_cities, mentioned_dates,
                                        read_request, requested_actions,
                                        stay_nights)
-from services.location_labels import city_zh
-from services.recommendation_geography import country_for_fixture_city
+from travel_assistant.services.location_labels import city_zh
+from travel_assistant.services.recommendation_geography import country_for_fixture_city
 from travel_assistant.core.config import settings
 
 

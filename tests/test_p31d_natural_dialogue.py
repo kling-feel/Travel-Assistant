@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 
 from travel_assistant.db.travel_models import (airports, flight_offers, flight_orders, flights,
                               hotel_products, hotels)
-from services.dialogue_context import mentioned_cities, mentioned_dates, read_request
-from services.agent_reads import read_for_assistant
-from services.recommendations import read_recommendation, ReviewedCatalogProvider
-from services.weather_search import search_weather
+from travel_assistant.services.dialogue_context import mentioned_cities, mentioned_dates, read_request
+from travel_assistant.services.agent_reads import read_for_assistant
+from travel_assistant.services.recommendations import read_recommendation, ReviewedCatalogProvider
+from travel_assistant.services.weather_search import search_weather
 from tests import test_p26a_dialogue as dialogue_cases
 
 
@@ -169,8 +169,8 @@ class WeatherEvidenceTests(unittest.TestCase):
                                       text=f"<html><body>{page['mainText']}</body></html>")
             return httpx.Response(200, json={
                 "queryContext": {"engineType": "GlobalBasic"}, "pageItems": [page]})
-        with patch("services.weather_search.settings.ALIYUN_IQS_ENABLED", True), patch(
-                "services.weather_search.settings.ALIYUN_IQS_API_KEY", "test-only"):
+        with patch("travel_assistant.services.weather_search.settings.ALIYUN_IQS_ENABLED", True), patch(
+                "travel_assistant.services.weather_search.settings.ALIYUN_IQS_API_KEY", "test-only"):
             return search_weather("Shanghai", self.target,
                                   transport=httpx.MockTransport(respond), now=self.now)
 
@@ -204,8 +204,8 @@ class WeatherEvidenceTests(unittest.TestCase):
                 "<html><title>上海-天气预报</title><body>上海 发布时间：10-20 12:00 "
                 "10/21 周三 多云 21℃ 15℃ 10/22 周四 晴 22℃ 16℃</body></html>"))
 
-        with patch("services.weather_search.settings.ALIYUN_IQS_ENABLED", True), patch(
-                "services.weather_search.settings.ALIYUN_IQS_API_KEY", "test-only"):
+        with patch("travel_assistant.services.weather_search.settings.ALIYUN_IQS_ENABLED", True), patch(
+                "travel_assistant.services.weather_search.settings.ALIYUN_IQS_API_KEY", "test-only"):
             result = search_weather("Shanghai", self.target,
                 transport=httpx.MockTransport(respond), now=self.now)
         self.assertEqual(calls, ["POST", "GET"])

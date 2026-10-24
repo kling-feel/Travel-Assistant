@@ -26,7 +26,7 @@ from travel_assistant.db.travel_models import (action_results, audit_events, cha
                               travelers)
 from main import Server
 from scripts.verify_p25_all_actions import _inputs
-from services.checkpoints import open_checkpointer
+from travel_assistant.services.checkpoints import open_checkpointer
 from travel_assistant.core.password_hash import get_hashed_password
 
 STATE = ROOT / "data/generated/p26b-verifier-state.json"

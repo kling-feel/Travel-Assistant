@@ -18,7 +18,7 @@ from travel_assistant.db.travel_models import (airports, demo_state, flight_offe
                               policy_documents, rental_products, travelers)
 from scripts.import_network_data import FIXTURE
 from main import Server
-from services.travel import find_flights
+from travel_assistant.services.travel import find_flights
 
 
 def main():

@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 from travel_assistant.db import engine
 from travel_assistant.db.travel_models import chat_messages, chat_sessions, chat_turns
 from scripts.verify_p26a_dialogue import FixedModel, _app, _auth, _counts
-from services.checkpoints import open_checkpointer
+from travel_assistant.services.checkpoints import open_checkpointer
 
 STATE = ROOT / "data" / "generated" / "p26a-restart-state.json"
 

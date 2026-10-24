@@ -8,9 +8,9 @@ from sqlalchemy import select, update
 
 from travel_assistant.db.travel_models import audit_events, flight_orders, pending_actions
 from graph_chat.controlled import _fresh_flight_candidates
-from services.dialogue_context import read_request
-from services.model_config import ModelUnavailable
-from services.travel import find_earliest_flights
+from travel_assistant.services.dialogue_context import read_request
+from travel_assistant.services.model_config import ModelUnavailable
+from travel_assistant.services.travel import find_earliest_flights
 from tests.test_p26a_dialogue import ScriptedModel
 from tests.test_p31e2a_earliest import EarliestJourneyTests, NOW
 
@@ -51,7 +51,7 @@ class WorkMemoryTests(unittest.TestCase):
         original = find_earliest_flights
         return (client, model_patch, saver_patch,
                 patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
-                patch("services.agent_reads.find_earliest_flights",
+                patch("travel_assistant.services.agent_reads.find_earliest_flights",
                       side_effect=lambda db, deps, arrs, **kwargs: original(
                           db, deps, arrs, now=NOW, **kwargs)))
 

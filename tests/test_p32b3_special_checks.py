@@ -6,7 +6,7 @@ from unittest.mock import patch
 from sqlalchemy import select
 
 from travel_assistant.db.travel_models import chat_messages, flight_orders, hotel_orders, pending_actions, rental_orders
-from services.weather_search import WeatherSearchError
+from travel_assistant.services.weather_search import WeatherSearchError
 from tests import test_p26a_dialogue as dialogue_cases
 
 
@@ -68,7 +68,7 @@ class SpecialChecksTests(unittest.TestCase):
             "city": "Shanghai", "target_date": "2026-10-19"}, "answer": "明天晴天"})
         client, model_patch, saver_patch = self.fixture.client(model)
         with model_patch, saver_patch, patch(
-                "services.agent_reads.search_weather",
+                "travel_assistant.services.agent_reads.search_weather",
                 side_effect=WeatherSearchError("timeout")), client:
             owner = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=owner, json={}).json()["id"]

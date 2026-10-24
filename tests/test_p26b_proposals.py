@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from travel_assistant.db.travel_models import (flight_orders, hotel_orders, metadata,
                               rental_orders, travelers)
-from services.agent_proposals import SelectionNeeded, _ordinal, _product_choice, prepare_actions
+from travel_assistant.services.agent_proposals import SelectionNeeded, _ordinal, _product_choice, prepare_actions
 from migrations import v013_turn_action_cards
 
 

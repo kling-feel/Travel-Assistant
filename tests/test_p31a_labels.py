@@ -4,7 +4,7 @@ import sqlite3
 import unittest
 from pathlib import Path
 
-from services.location_labels import airport_zh, city_zh, product_zh
+from travel_assistant.services.location_labels import airport_zh, city_zh, product_zh
 
 
 class LocationLabelTests(unittest.TestCase):

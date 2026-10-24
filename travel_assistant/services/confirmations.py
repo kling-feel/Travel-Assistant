@@ -9,12 +9,12 @@ from travel_assistant.db.travel_models import (action_results, audit_events, fli
                               hotel_products, pending_actions, policy_documents,
                               rental_orders, rental_products,
                               travelers)
-from services.actions import (ActionError, ActionNotFound, FIELDS, _date,
+from travel_assistant.services.actions import (ActionError, ActionNotFound, FIELDS, _date,
                               _policy, _quote, _utc)
-from services.sessions import _owned_session
-from services.travel import (OrderError, book_flight, book_hotel, cancel_flight,
+from travel_assistant.services.sessions import _owned_session
+from travel_assistant.services.travel import (OrderError, book_flight, book_hotel, cancel_flight,
                              cancel_hotel, change_flight, change_hotel)
-from services.rentals import (book_rental, cancel_rental, change_rental,
+from travel_assistant.services.rentals import (book_rental, cancel_rental, change_rental,
                               normalize_book_params, normalize_change_params)
 
 

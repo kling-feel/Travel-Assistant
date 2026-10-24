@@ -10,9 +10,9 @@ from travel_assistant.db.travel_models import (airports, demo_state, hotel_produ
                               policy_documents, rental_products)
 from migrations import v007_city_products
 from scripts.import_network_data import FIXTURE, prepare_snapshot
-from services.city_products import GENERATION_RULE, generate_products
-from services.policy_catalog import ALL_POLICIES, CURRENT_POLICIES, SEED_POLICIES
-from services.travel import OrderError, find_hotels, find_rentals, policies
+from travel_assistant.services.city_products import GENERATION_RULE, generate_products
+from travel_assistant.services.policy_catalog import ALL_POLICIES, CURRENT_POLICIES, SEED_POLICIES
+from travel_assistant.services.travel import OrderError, find_hotels, find_rentals, policies
 
 
 class CityProductTests(unittest.TestCase):

@@ -9,8 +9,8 @@ from sqlalchemy import insert, select, update
 from travel_assistant.db.travel_models import airports, flight_offers, flight_orders, flights, pending_actions
 from tests.test_p26a_dialogue import ScriptedModel
 from tests import test_p31e2a_earliest as earliest_cases
-from services.travel import find_earliest_flights
-from services.country_flights import find_country_flights
+from travel_assistant.services.travel import find_earliest_flights
+from travel_assistant.services.country_flights import find_country_flights
 
 NOW = earliest_cases.NOW
 
@@ -55,8 +55,8 @@ class CountryBookingTests(unittest.TestCase):
         original_search = find_earliest_flights
         with (model_patch, saver_patch,
               patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
-              patch("services.country_flights._utc_now", return_value=NOW),
-              patch("services.agent_reads.find_earliest_flights",
+              patch("travel_assistant.services.country_flights._utc_now", return_value=NOW),
+              patch("travel_assistant.services.agent_reads.find_earliest_flights",
                     side_effect=lambda db, deps, arrs, **kwargs: original_search(
                         db, deps, arrs, now=NOW, **kwargs)), client):
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
@@ -78,7 +78,7 @@ class CountryBookingTests(unittest.TestCase):
         model = ScriptedModel()
         client, model_patch, saver_patch = self.fixture.fixture.fixture.client(model)
         with (model_patch, saver_patch,
-              patch("services.country_flights._utc_now", return_value=NOW), client):
+              patch("travel_assistant.services.country_flights._utc_now", return_value=NOW), client):
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             first = self.turn(client, sid, auth, 11, "我要去中国，订最早的机票")
@@ -93,8 +93,8 @@ class CountryBookingTests(unittest.TestCase):
         model = ScriptedModel()
         client, model_patch, saver_patch = self.fixture.fixture.fixture.client(model)
         with (model_patch, saver_patch,
-              patch("services.country_flights._utc_now", return_value=NOW),
-              patch("services.agent_reads.find_earliest_flights",
+              patch("travel_assistant.services.country_flights._utc_now", return_value=NOW),
+              patch("travel_assistant.services.agent_reads.find_earliest_flights",
                     side_effect=lambda db, deps, arrs, **kwargs: find_earliest_flights(
                         db, deps, arrs, now=NOW, **kwargs)), client):
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
@@ -132,8 +132,8 @@ class CountryBookingTests(unittest.TestCase):
         model = ScriptedModel()
         client, model_patch, saver_patch = self.fixture.fixture.fixture.client(model)
         with (model_patch, saver_patch,
-              patch("services.country_flights._utc_now", return_value=NOW),
-              patch("services.agent_reads.find_earliest_flights",
+              patch("travel_assistant.services.country_flights._utc_now", return_value=NOW),
+              patch("travel_assistant.services.agent_reads.find_earliest_flights",
                     side_effect=lambda db, deps, arrs, **kwargs: find_earliest_flights(
                         db, deps, arrs, now=NOW, **kwargs)), client):
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
@@ -153,7 +153,7 @@ class CountryBookingTests(unittest.TestCase):
             db.execute(insert(flight_offers).values(
                 flight_id=9904, amount=6800, version=1, rule_id="network-fare-v1"))
         near_china_midnight = datetime(2026, 10, 21, 17, tzinfo=timezone.utc)
-        with (patch("services.country_flights._utc_now", return_value=near_china_midnight),
+        with (patch("travel_assistant.services.country_flights._utc_now", return_value=near_china_midnight),
               self.fixture.engine.connect() as db):
             result = find_country_flights(db, "London", "CN", relative_offset=1)
         self.assertEqual(result["not_before"], "2026-10-22")
@@ -164,7 +164,7 @@ class CountryBookingTests(unittest.TestCase):
         model = ScriptedModel(*([general] * 4))
         client, model_patch, saver_patch = self.fixture.fixture.fixture.client(model)
         with (model_patch, saver_patch,
-              patch("services.country_flights._utc_now", return_value=NOW), client):
+              patch("travel_assistant.services.country_flights._utc_now", return_value=NOW), client):
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             self.turn(client, sid, auth, 41, "我在伦敦")
@@ -182,7 +182,7 @@ class CountryBookingTests(unittest.TestCase):
         model = ScriptedModel()
         client, model_patch, saver_patch = self.fixture.fixture.fixture.client(model)
         with (model_patch, saver_patch,
-              patch("services.country_flights._utc_now", return_value=NOW), client):
+              patch("travel_assistant.services.country_flights._utc_now", return_value=NOW), client):
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             self.turn(client, sid, auth, 51, "从伦敦到中国，订最早的机票")

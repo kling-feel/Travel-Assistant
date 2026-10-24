@@ -9,10 +9,10 @@ from sqlalchemy import insert, select, update
 from travel_assistant.db.travel_models import (airports, flight_offers, flights, hotel_orders, hotel_products, hotels,
                               pending_actions, policy_documents, rental_orders,
                               rental_products)
-from services.dialogue_context import read_request, rental_clocks
-from services.agent_proposals import SelectionNeeded, prepare_actions
-from services.policy_catalog import CURRENT_POLICIES
-from services.travel import find_hotels, find_rentals
+from travel_assistant.services.dialogue_context import read_request, rental_clocks
+from travel_assistant.services.agent_proposals import SelectionNeeded, prepare_actions
+from travel_assistant.services.policy_catalog import CURRENT_POLICIES
+from travel_assistant.services.travel import find_hotels, find_rentals
 from graph_chat.controlled import _fresh_offer_candidates
 from tests import test_p26a_dialogue as dialogue_cases
 
@@ -127,7 +127,7 @@ class StayPriceRentalTests(unittest.TestCase):
         with (model_patch, saver_patch,
               patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 23)),
               patch("api.travel.local_today", return_value=date(2026, 10, 23)),
-              patch("services.actions.datetime", _FixedActionClock), client):
+              patch("travel_assistant.services.actions.datetime", _FixedActionClock), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             flight = self.fixture.turn(client, sid, auth, "h3-flight-01",
@@ -198,7 +198,7 @@ class StayPriceRentalTests(unittest.TestCase):
         with (model_patch, saver_patch,
               patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
               patch("api.travel.local_today", return_value=date(2026, 10, 21)),
-              patch("services.actions._hotel_today", return_value=date(2026, 10, 21)), client):
+              patch("travel_assistant.services.actions._hotel_today", return_value=date(2026, 10, 21)), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             for key, prompt in (("hotel-e2b-1", "查明天到后天上海的酒店"),
@@ -224,7 +224,7 @@ class StayPriceRentalTests(unittest.TestCase):
                                             return_value=date(2026, 10, 22)), patch(
                                                 "api.travel.local_today",
                                                 return_value=date(2026, 10, 22)), patch(
-                                                    "services.actions.datetime", _FixedActionClock), client:
+                                                    "travel_assistant.services.actions.datetime", _FixedActionClock), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             first = self.fixture.turn(client, sid, auth, "rental-e2b-1",
@@ -253,7 +253,7 @@ class StayPriceRentalTests(unittest.TestCase):
         client, model_patch, saver_patch = self.fixture.client(model)
         with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
                                             return_value=date(2026, 10, 22)), patch(
-                                                "services.actions.datetime", _FixedActionClock), client:
+                                                "travel_assistant.services.actions.datetime", _FixedActionClock), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             for key, prompt in (("rental-split-1", "我在上海租车，明天取大后天还"),

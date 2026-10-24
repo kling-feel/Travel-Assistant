@@ -11,10 +11,10 @@ from sqlalchemy import create_engine, insert
 from travel_assistant.db.travel_models import (airports as airport_table, demo_state,
                               hotel_products, hotels, metadata)
 from scripts.import_network_data import FIXTURE, prepare_snapshot
-from services.city_products import (GENERATION_RULE, HOTEL_LAST_CHECKOUT_OFFSET,
+from travel_assistant.services.city_products import (GENERATION_RULE, HOTEL_LAST_CHECKOUT_OFFSET,
                                     generate_products)
-from services.flight_schedule import fictional_duration, great_circle_km
-from services.travel import find_hotels
+from travel_assistant.services.flight_schedule import fictional_duration, great_circle_km
+from travel_assistant.services.travel import find_hotels
 
 
 class FictionalScheduleTests(unittest.TestCase):

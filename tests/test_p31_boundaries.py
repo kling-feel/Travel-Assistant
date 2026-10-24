@@ -2,7 +2,7 @@
 
 import unittest
 
-from services.dialogue_boundaries import boundary_intent
+from travel_assistant.services.dialogue_boundaries import boundary_intent
 
 
 class CardBoundaryTests(unittest.TestCase):

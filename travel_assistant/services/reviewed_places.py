@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from functools import lru_cache
 from urllib.parse import urlsplit
 
-from services.recommendation_geography import country_for_fixture_city
+from travel_assistant.services.recommendation_geography import country_for_fixture_city
 from travel_assistant.paths import FIXTURES_DIR
 
 _ROOT = FIXTURES_DIR

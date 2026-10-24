@@ -14,7 +14,7 @@ from travel_assistant.core.config import settings
 from travel_assistant.db.travel_models import (airports, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, metadata, travelers)
 from fastapi import FastAPI
-from services.travel import (OrderError, book_hotel, cancel_flight, change_flight,
+from travel_assistant.services.travel import (OrderError, book_hotel, cancel_flight, change_flight,
                              change_hotel, itinerary)
 from travel_assistant.core.dependencies import get_db
 from travel_assistant.core.password_hash import get_hashed_password

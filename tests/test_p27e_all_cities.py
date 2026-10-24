@@ -8,11 +8,11 @@ from sqlalchemy.orm import Session
 
 from travel_assistant.db.travel_models import airports, flight_offers, flights
 from scripts.verify_network_fixture import reachable_cities
-from services.recommendation_geography import airport_geography
-from services.recommendations import (_CITY_ALIASES, RecommendationSearchError,
+from travel_assistant.services.recommendation_geography import airport_geography
+from travel_assistant.services.recommendations import (_CITY_ALIASES, RecommendationSearchError,
                                       ReviewedCatalogProvider,
                                       read_recommendation)
-from services.reviewed_places import places_for_city, reviewed_places
+from travel_assistant.services.reviewed_places import places_for_city, reviewed_places
 
 
 class AllCityRecommendationTests(unittest.TestCase):

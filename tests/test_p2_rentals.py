@@ -11,10 +11,10 @@ from sqlalchemy.orm import Session
 from travel_assistant.db.travel_models import (action_results, demo_state, policy_documents,
                               rental_orders, rental_products)
 from migrations import v006_demo_state
-from services.actions import ActionError, create_proposal
-from services.confirmations import confirm_action, reject_action
-from services.rentals import _billable_days, _local_time
-from services.travel import OrderError
+from travel_assistant.services.actions import ActionError, create_proposal
+from travel_assistant.services.confirmations import confirm_action, reject_action
+from travel_assistant.services.rentals import _billable_days, _local_time
+from travel_assistant.services.travel import OrderError
 from test_p2_actions import ActionFixture
 
 

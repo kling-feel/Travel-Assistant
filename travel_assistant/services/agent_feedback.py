@@ -7,10 +7,10 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 
 from travel_assistant.db.travel_models import airports, flight_orders, flights, hotel_orders
-from services.actions import _hotel_today
-from services.dialogue_context import mentioned_cities
-from services.location_labels import city_zh
-from services.travel import itinerary
+from travel_assistant.services.actions import _hotel_today
+from travel_assistant.services.dialogue_context import mentioned_cities
+from travel_assistant.services.location_labels import city_zh
+from travel_assistant.services.travel import itinerary
 
 
 def _utc(value):

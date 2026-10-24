@@ -8,9 +8,9 @@ from sqlalchemy import create_engine, insert, inspect
 from travel_assistant.db.travel_models import airports, demo_state, flight_offers, flights, metadata
 from migrations import v005_network, v006_demo_state
 from scripts.import_network_data import FIXTURE, prepare_snapshot
-from services.actions import _offer
-from services.demo_pricing import network_fare
-from services.travel import find_flights
+from travel_assistant.services.actions import _offer
+from travel_assistant.services.demo_pricing import network_fare
+from travel_assistant.services.travel import find_flights
 
 
 class NetworkTests(unittest.TestCase):

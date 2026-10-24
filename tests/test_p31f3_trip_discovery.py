@@ -8,9 +8,9 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import insert, select, update
 
 from travel_assistant.db.travel_models import airports, demo_state, flight_offers, flight_orders, flights
-from services.dialogue_context import local_today
-from services.recommendations import ReviewedCatalogProvider
-from services.trip_discovery import discover_destinations
+from travel_assistant.services.dialogue_context import local_today
+from travel_assistant.services.recommendations import ReviewedCatalogProvider
+from travel_assistant.services.trip_discovery import discover_destinations
 from tests import test_p26a_dialogue as cases
 
 
@@ -60,8 +60,8 @@ class TripDiscoveryTests(unittest.TestCase):
             db.execute(insert(flight_orders).values(id="old-london", traveler_id="t1",
                                                     flight_id=23, amount=2600,
                                                     status="cancelled", version=2))
-        self.weather_patch = patch("services.trip_discovery.search_weather", return_value=None)
-        self.catalog_patch = patch("services.trip_discovery.get_recommendation_provider",
+        self.weather_patch = patch("travel_assistant.services.trip_discovery.search_weather", return_value=None)
+        self.catalog_patch = patch("travel_assistant.services.trip_discovery.get_recommendation_provider",
                                    return_value=ReviewedCatalogProvider())
         self.weather_patch.start()
         self.catalog_patch.start()

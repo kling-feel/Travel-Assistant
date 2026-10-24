@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 
 from travel_assistant.db.travel_models import (airports, flight_offers, flight_orders, flights,
                               hotel_orders, hotel_products, hotels, pending_actions)
-from services.agent_feedback import cancellation_overview, explain_action_error
-from services.agent_reads import read_for_assistant
-from services.recommendations import ReviewedCatalogProvider
+from travel_assistant.services.agent_feedback import cancellation_overview, explain_action_error
+from travel_assistant.services.agent_reads import read_for_assistant
+from travel_assistant.services.recommendations import ReviewedCatalogProvider
 from tests import test_p26a_dialogue as dialogue_cases
 
 

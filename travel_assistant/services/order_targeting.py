@@ -3,9 +3,9 @@
 import re
 
 from travel_assistant.db.travel_models import airports
-from services.dialogue_context import mentioned_cities
-from services.location_labels import city_zh, product_zh
-from services.travel import itinerary
+from travel_assistant.services.dialogue_context import mentioned_cities
+from travel_assistant.services.location_labels import city_zh, product_zh
+from travel_assistant.services.travel import itinerary
 from sqlalchemy import select
 
 

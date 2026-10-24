@@ -12,8 +12,8 @@ from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from travel_assistant.db.travel_models import airports, flight_offers, flights
-from services.recommendations import ReviewedCatalogProvider, read_recommendation
-from services.reviewed_places import places_for_city, reviewed_places
+from travel_assistant.services.recommendations import ReviewedCatalogProvider, read_recommendation
+from travel_assistant.services.reviewed_places import places_for_city, reviewed_places
 
 
 class PlaceDisplayTests(unittest.TestCase):
@@ -41,7 +41,7 @@ class PlaceDisplayTests(unittest.TestCase):
                                 encoding="utf-8")
             reviewed_places.cache_clear()
             try:
-                with patch("services.reviewed_places._DISPLAY_SOURCE", tampered):
+                with patch("travel_assistant.services.reviewed_places._DISPLAY_SOURCE", tampered):
                     with self.assertRaises(ValueError):
                         reviewed_places()
             finally:

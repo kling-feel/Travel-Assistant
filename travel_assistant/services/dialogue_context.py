@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from services.location_labels import AIRPORT_NAMES, CITY_ALIASES, EXTRA_CITY_ALIASES
+from travel_assistant.services.location_labels import AIRPORT_NAMES, CITY_ALIASES, EXTRA_CITY_ALIASES
 
 
 _ALIASES = {**CITY_ALIASES, **EXTRA_CITY_ALIASES}

@@ -26,7 +26,7 @@ from travel_assistant.db.travel_models import (action_results, audit_events, cha
                               airports, demo_state, flight_orders, flights, hotel_orders,
                               pending_actions, rental_orders)
 from main import Server
-from services.recommendations import ReviewedCatalogProvider
+from travel_assistant.services.recommendations import ReviewedCatalogProvider
 
 
 STATE = ROOT / "data/generated/p31e4-journey-state.json"

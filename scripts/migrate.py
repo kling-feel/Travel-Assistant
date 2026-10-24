@@ -42,7 +42,7 @@ def main():
                 print("Applied", migration.VERSION)
             else:
                 print("Already applied", migration.VERSION)
-    from services.checkpoints import setup_checkpoints
+    from travel_assistant.services.checkpoints import setup_checkpoints
     setup_checkpoints()
 
 

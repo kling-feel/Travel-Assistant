@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from travel_assistant.db.travel_models import (airports, flight_offers, flight_orders, flights,
                               hotel_products, hotels, pending_actions)
-from services.dialogue_context import read_request, requested_actions
+from travel_assistant.services.dialogue_context import read_request, requested_actions
 from tests import test_p26a_dialogue as dialogue_cases
 
 

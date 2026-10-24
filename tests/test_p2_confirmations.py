@@ -12,9 +12,9 @@ from travel_assistant.db.travel_models import (action_results, audit_events, cha
                               pending_actions,
                               policy_documents)
 from migrations import v004_confirmations
-from services.actions import create_proposal
-from services.confirmations import confirm_action
-from services.policy_catalog import HOTEL_POLICY, HOTEL_POLICY_V3, LEGACY_POLICIES
+from travel_assistant.services.actions import create_proposal
+from travel_assistant.services.confirmations import confirm_action
+from travel_assistant.services.policy_catalog import HOTEL_POLICY, HOTEL_POLICY_V3, LEGACY_POLICIES
 from test_p2_actions import ActionFixture
 
 
@@ -241,7 +241,7 @@ class ConfirmationTests(ActionFixture):
                                                         "expected_version": 1,
                                                         "new_flight_id": 2})
             db.commit()
-            with patch("services.confirmations._event", side_effect=RuntimeError("audit failed")):
+            with patch("travel_assistant.services.confirmations._event", side_effect=RuntimeError("audit failed")):
                 with self.assertRaisesRegex(RuntimeError, "audit failed"):
                     confirm_action(db, "t1", "session-1", action["id"], now=self.now)
             db.rollback()

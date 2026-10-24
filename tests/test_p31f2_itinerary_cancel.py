@@ -9,11 +9,11 @@ from api.travel import _card_brief
 from travel_assistant.db.travel_models import (airports, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, policy_documents,
                               rental_orders, rental_products)
-from services.agent_reads import read_for_assistant
-from services.agent_feedback import bulk_cancellation_requested, cancellation_overview
-from services.order_targeting import matching_orders
-from services.policy_catalog import CURRENT_POLICIES
-from services.location_labels import airport_zh
+from travel_assistant.services.agent_reads import read_for_assistant
+from travel_assistant.services.agent_feedback import bulk_cancellation_requested, cancellation_overview
+from travel_assistant.services.order_targeting import matching_orders
+from travel_assistant.services.policy_catalog import CURRENT_POLICIES
+from travel_assistant.services.location_labels import airport_zh
 from tests import test_p26a_dialogue as cases
 
 

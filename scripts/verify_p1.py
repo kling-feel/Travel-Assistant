@@ -14,7 +14,7 @@ from travel_assistant.db.travel_models import (airports, demo_state, flight_offe
                               flights, hotel_orders, hotel_products,
                               policy_documents, rental_products, travelers)
 from main import Server
-from services.travel import OrderError, change_flight
+from travel_assistant.services.travel import OrderError, change_flight
 
 
 def main():

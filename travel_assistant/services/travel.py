@@ -14,10 +14,10 @@ from sqlalchemy import and_, func, insert, or_, select, update
 from travel_assistant.db.travel_models import (airports, demo_state, flight_offers, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, policy_documents, rental_orders,
                               rental_products)
-from services.city_products import HOTEL_LAST_CHECKOUT_OFFSET
-from services.policy_catalog import CURRENT_POLICIES
-from services.demo_pricing import NETWORK_OFFER_RULE_ID, OFFER_RULE_ID
-from services.itinerary_state import display_state
+from travel_assistant.services.city_products import HOTEL_LAST_CHECKOUT_OFFSET
+from travel_assistant.services.policy_catalog import CURRENT_POLICIES
+from travel_assistant.services.demo_pricing import NETWORK_OFFER_RULE_ID, OFFER_RULE_ID
+from travel_assistant.services.itinerary_state import display_state
 
 
 class OrderError(ValueError):

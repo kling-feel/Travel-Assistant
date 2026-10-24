@@ -22,27 +22,27 @@ from sqlalchemy.orm import Session
 
 from travel_assistant.core.config import settings
 from travel_assistant.db.travel_models import airports, travelers
-from services.location_labels import airport_zh, city_zh, product_zh, amount_zh
-from services.travel import (OrderError, find_flights, find_hotels, find_rentals,
+from travel_assistant.services.location_labels import airport_zh, city_zh, product_zh, amount_zh
+from travel_assistant.services.travel import (OrderError, find_flights, find_hotels, find_rentals,
                              itinerary, policies)
-from services.sessions import (SessionNotFound, append_message,
+from travel_assistant.services.sessions import (SessionNotFound, append_message,
                                create_session as create_chat_session,
                                get_session_history, latest_session_references,
                                list_sessions, _owned_session)
-from services.actions import (ActionError, ActionNotFound, create_proposal,
+from travel_assistant.services.actions import (ActionError, ActionNotFound, create_proposal,
                               get_proposal, list_proposals)
-from services.confirmations import confirm_action, reject_action, list_action_history
-from services.agent_reads import demo_date, read_action_guidance, read_for_assistant
-from services.dialogue_context import local_today, requested_actions
-from services.chat_turns import (TurnConflict, _public as public_turn, begin_turn,
+from travel_assistant.services.confirmations import confirm_action, reject_action, list_action_history
+from travel_assistant.services.agent_reads import demo_date, read_action_guidance, read_for_assistant
+from travel_assistant.services.dialogue_context import local_today, requested_actions
+from travel_assistant.services.chat_turns import (TurnConflict, _public as public_turn, begin_turn,
                                  fail_turn, finish_turn, get_turn, latest_turn, has_graph_turns,
                                  lock_processing_turn)
-from services.agent_proposals import SelectionNeeded, prepare_actions, verify_shown_quotes
-from services.agent_feedback import (bulk_cancellation_requested, cancellation_overview, explain_action_error,
+from travel_assistant.services.agent_proposals import SelectionNeeded, prepare_actions, verify_shown_quotes
+from travel_assistant.services.agent_feedback import (bulk_cancellation_requested, cancellation_overview, explain_action_error,
                                      explain_selection_needed)
-from services.checkpoints import open_checkpointer
-from services.model_config import ModelUnavailable, get_chat_model
-from services.recommendations import (get_recommendation_provider,
+from travel_assistant.services.checkpoints import open_checkpointer
+from travel_assistant.services.model_config import ModelUnavailable, get_chat_model
+from travel_assistant.services.recommendations import (get_recommendation_provider,
                                       read_recommendation)
 from graph_chat.controlled import build_graph
 from travel_assistant.core.dependencies import get_db

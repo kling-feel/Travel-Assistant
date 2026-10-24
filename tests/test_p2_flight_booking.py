@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from travel_assistant.db.travel_models import (action_results, demo_state, flight_offers,
                               flight_orders, flights, policy_documents)
 from migrations import v006_demo_state, v008_flight_booking
-from services.actions import ActionError, create_proposal
-from services.confirmations import confirm_action, reject_action
+from travel_assistant.services.actions import ActionError, create_proposal
+from travel_assistant.services.confirmations import confirm_action, reject_action
 from test_p2_actions import ActionFixture
 
 

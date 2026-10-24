@@ -22,8 +22,8 @@ from travel_assistant.db.travel_models import (airports, demo_state, flight_offe
                               flights, hotel_products, hotels, metadata,
                               policy_documents, rental_products, travelers)
 from main import Server
-from services.model_config import ModelUnavailable
-from services.policy_catalog import CURRENT_POLICIES
+from travel_assistant.services.model_config import ModelUnavailable
+from travel_assistant.services.policy_catalog import CURRENT_POLICIES
 from travel_assistant.core.dependencies import get_db
 from travel_assistant.core.password_hash import get_hashed_password
 

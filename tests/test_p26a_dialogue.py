@@ -20,11 +20,11 @@ from travel_assistant.db.travel_models import (airports, chat_messages, chat_tur
                               flight_orders, flights, metadata, pending_actions,
                               policy_documents, travelers)
 from migrations import v001_travel, v002_sessions, v012_chat_turns
-from services.chat_turns import TurnConflict, begin_turn
-from services.model_config import ModelUnavailable
-from services.policy_catalog import CURRENT_POLICIES
-from services.recommendations import RecommendationSearchError, ReviewedCatalogProvider
-from services.sessions import create_session
+from travel_assistant.services.chat_turns import TurnConflict, begin_turn
+from travel_assistant.services.model_config import ModelUnavailable
+from travel_assistant.services.policy_catalog import CURRENT_POLICIES
+from travel_assistant.services.recommendations import RecommendationSearchError, ReviewedCatalogProvider
+from travel_assistant.services.sessions import create_session
 from travel_assistant.core.dependencies import get_db
 from travel_assistant.core.password_hash import get_hashed_password
 
@@ -633,7 +633,7 @@ class DialogueTests(unittest.TestCase):
                                "answer": "Kunstmuseum Basel"})
         client, model_patch, saver_patch = self.client(model)
         with model_patch, saver_patch, patch(
-                "services.recommendations.settings.ALIYUN_IQS_API_KEY", ""), client:
+                "travel_assistant.services.recommendations.settings.ALIYUN_IQS_API_KEY", ""), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             response = self.turn(client, sid, auth, "place-unconfigured",

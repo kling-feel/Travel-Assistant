@@ -3,7 +3,7 @@
 from sqlalchemy import insert, select, text
 
 from travel_assistant.db.travel_models import policy_documents
-from services.policy_catalog import CURRENT_RENTAL_POLICY
+from travel_assistant.services.policy_catalog import CURRENT_RENTAL_POLICY
 
 VERSION = "011_rental_changes"
 

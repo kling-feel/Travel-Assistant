@@ -6,7 +6,7 @@ from uuid import uuid4
 from sqlalchemy import insert, select, update
 
 from travel_assistant.db.travel_models import chat_turns
-from services.sessions import _owned_session, append_message
+from travel_assistant.services.sessions import _owned_session, append_message
 
 
 class TurnConflict(ValueError):

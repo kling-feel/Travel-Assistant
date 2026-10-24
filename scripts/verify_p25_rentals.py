@@ -25,8 +25,8 @@ from travel_assistant.db.travel_models import (action_results, audit_events, cha
                               rental_orders, rental_products, travelers, airports,
                               demo_state)
 from main import Server
-from services.actions import create_proposal
-from services.confirmations import confirm_action, reject_action
+from travel_assistant.services.actions import create_proposal
+from travel_assistant.services.confirmations import confirm_action, reject_action
 from travel_assistant.core.password_hash import get_hashed_password
 
 

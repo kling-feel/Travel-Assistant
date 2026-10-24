@@ -6,9 +6,9 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 
 from travel_assistant.db.travel_models import airports, demo_state, flight_offers, flights
-from services.demo_pricing import NETWORK_OFFER_RULE_ID, OFFER_RULE_ID
-from services.location_labels import amount_zh, city_zh
-from services.recommendation_geography import airport_geography
+from travel_assistant.services.demo_pricing import NETWORK_OFFER_RULE_ID, OFFER_RULE_ID
+from travel_assistant.services.location_labels import amount_zh, city_zh
+from travel_assistant.services.recommendation_geography import airport_geography
 
 
 COUNTRIES = {

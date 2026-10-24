@@ -5,12 +5,12 @@ from unittest.mock import patch
 
 import httpx
 
-from services.recommendations import (CleverSeeRecommendationProvider,
+from travel_assistant.services.recommendations import (CleverSeeRecommendationProvider,
                                       RecommendationSearchError,
                                       ReviewedCatalogProvider,
                                       _search_record,
                                       get_recommendation_provider)
-from services.recommendation_geography import (airport_geography,
+from travel_assistant.services.recommendation_geography import (airport_geography,
                                                country_for_fixture_city)
 
 
@@ -27,19 +27,19 @@ class CleverSeeSourceTests(unittest.TestCase):
                          {"code": "SC", "name": "Seychelles"})
 
     def test_no_key_keeps_live_search_disabled(self):
-        with patch("services.recommendations.settings.ALIYUN_IQS_ENABLED", True), patch(
-                "services.recommendations.settings.ALIYUN_IQS_API_KEY", ""):
+        with patch("travel_assistant.services.recommendations.settings.ALIYUN_IQS_ENABLED", True), patch(
+                "travel_assistant.services.recommendations.settings.ALIYUN_IQS_API_KEY", ""):
             provider = get_recommendation_provider()
             self.assertIsInstance(provider, ReviewedCatalogProvider)
             self.assertIsNone(provider._live)
 
     def test_configured_key_is_safe_until_explicitly_enabled(self):
-        with patch("services.recommendations.settings.ALIYUN_IQS_API_KEY", "test-only-key"):
-            with patch("services.recommendations.settings.ALIYUN_IQS_ENABLED", False):
+        with patch("travel_assistant.services.recommendations.settings.ALIYUN_IQS_API_KEY", "test-only-key"):
+            with patch("travel_assistant.services.recommendations.settings.ALIYUN_IQS_ENABLED", False):
                 provider = get_recommendation_provider()
                 self.assertIsInstance(provider, ReviewedCatalogProvider)
                 self.assertIsNone(provider._live)
-            with patch("services.recommendations.settings.ALIYUN_IQS_ENABLED", True):
+            with patch("travel_assistant.services.recommendations.settings.ALIYUN_IQS_ENABLED", True):
                 provider = get_recommendation_provider()
                 self.assertIsInstance(provider, ReviewedCatalogProvider)
                 self.assertIsInstance(provider._live, CleverSeeRecommendationProvider)

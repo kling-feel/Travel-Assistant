@@ -17,8 +17,8 @@ from travel_assistant.db.travel_models import (airports, chat_sessions, flight_o
 from migrations import (v001_travel, v002_sessions, v003_actions,
                         v004_confirmations, v009_rental_orders,
                         v010_hotel_refunds, v011_rental_changes)
-from services.actions import ActionError, create_proposal, get_proposal
-from services.demo_pricing import cancellation_fee
+from travel_assistant.services.actions import ActionError, create_proposal, get_proposal
+from travel_assistant.services.demo_pricing import cancellation_fee
 from travel_assistant.core.dependencies import get_db
 from travel_assistant.core.password_hash import get_hashed_password
 

@@ -14,8 +14,8 @@ from travel_assistant.db.travel_models import (audit_events, chat_sessions, flig
                               flights, hotel_orders, hotel_products,
                               pending_actions)
 from main import Server
-from services.actions import create_proposal
-from services.demo_pricing import cancellation_fee
+from travel_assistant.services.actions import create_proposal
+from travel_assistant.services.demo_pricing import cancellation_fee
 
 
 def app():

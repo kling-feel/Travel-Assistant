@@ -7,7 +7,7 @@ from sqlalchemy import insert, select
 
 from travel_assistant.db.travel_models import flight_offers, flights
 # v003 imports this historical name; current hotel transactions use policy_catalog.HOTEL_POLICY.
-from services.policy_catalog import FLIGHT_POLICY, HOTEL_POLICY_V3 as HOTEL_POLICY
+from travel_assistant.services.policy_catalog import FLIGHT_POLICY, HOTEL_POLICY_V3 as HOTEL_POLICY
 
 
 FLIGHT_FARES = {"LH0130": 6400, "QR0055": 6800,

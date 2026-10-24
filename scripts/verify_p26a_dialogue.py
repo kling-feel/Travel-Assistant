@@ -19,8 +19,8 @@ from travel_assistant.db.travel_models import (action_results, audit_events, cha
                               hotel_orders, pending_actions, rental_orders,
                               travelers)
 from main import Server
-from services.checkpoints import open_checkpointer
-from services.agent_reads import demo_date
+from travel_assistant.services.checkpoints import open_checkpointer
+from travel_assistant.services.agent_reads import demo_date
 
 
 class FixedModel:

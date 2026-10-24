@@ -15,10 +15,10 @@ sys.path.insert(0, str(ROOT))
 
 from travel_assistant.core.config import settings
 from main import Server
-from services.answer_composer import compose_verified_answer
-from services.model_config import get_chat_model
-from services.recommendations import CleverSeeRecommendationProvider
-from services.weather_search import search_weather
+from travel_assistant.services.answer_composer import compose_verified_answer
+from travel_assistant.services.model_config import get_chat_model
+from travel_assistant.services.recommendations import CleverSeeRecommendationProvider
+from travel_assistant.services.weather_search import search_weather
 
 
 LEDGER = ROOT / "data/generated/p31h3-paid-ledger.json"
@@ -129,7 +129,7 @@ def main():
     with (patch("api.travel.get_chat_model", return_value=model),
           patch.object(CleverSeeRecommendationProvider, "search",
                        _count_search(provider_search, "place")),
-          patch("services.agent_reads.search_weather",
+          patch("travel_assistant.services.agent_reads.search_weather",
                 side_effect=_count_search(search_weather, "weather"))):
         uvicorn.run(server.app, host=settings.HOST, port=settings.PORT)
 

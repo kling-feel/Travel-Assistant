@@ -7,9 +7,9 @@ from sqlalchemy import select
 
 from travel_assistant.db.travel_models import (chat_turns, flight_offers, flight_orders, hotel_orders,
                               hotel_products, rental_orders, rental_products)
-from services.actions import FIELDS
-from services.dialogue_context import mentioned_cities, mentioned_dates
-from services.order_targeting import matching_orders, order_options
+from travel_assistant.services.actions import FIELDS
+from travel_assistant.services.dialogue_context import mentioned_cities, mentioned_dates
+from travel_assistant.services.order_targeting import matching_orders, order_options
 
 
 class SelectionNeeded(ValueError):
@@ -153,7 +153,7 @@ def _owned_order(db, traveler_id, kind, proposed, text, *, all_cancellations=Fal
     if not matches:
         raise SelectionNeeded("没有找到符合你描述的本人有效订单，请核对地点或订单号。")
     if len(matches) > 1:
-        from services.travel import itinerary
+        from travel_assistant.services.travel import itinerary
         details = {row["id"]: row for row in itinerary(db, traveler_id)[f"{kind}_orders"]}
         raise SelectionNeeded("找到多笔符合条件的本人订单，请选择其中一笔：" +
                               order_options(kind, [details.get(row["id"], row) for row in matches]))

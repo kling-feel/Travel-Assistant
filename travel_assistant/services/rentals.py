@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import insert, select, update
 
 from travel_assistant.db.travel_models import airports, demo_state, rental_orders, rental_products
-from services.travel import OrderError
+from travel_assistant.services.travel import OrderError
 
 
 def _utc(value):

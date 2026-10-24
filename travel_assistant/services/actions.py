@@ -9,14 +9,14 @@ from sqlalchemy import insert, select
 from travel_assistant.db.travel_models import (airports, audit_events, demo_state, flight_offers, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, pending_actions,
                               policy_documents)
-from services.demo_pricing import (FLIGHT_POLICY, NETWORK_OFFER_RULE_ID,
+from travel_assistant.services.demo_pricing import (FLIGHT_POLICY, NETWORK_OFFER_RULE_ID,
                                    OFFER_RULE_ID,
                                    cancellation_fee)
-from services.sessions import SessionNotFound, _owned_session
-from services.policy_catalog import HOTEL_POLICY, CURRENT_RENTAL_POLICY
-from services.rentals import (normalize_book_params, normalize_change_params,
+from travel_assistant.services.sessions import SessionNotFound, _owned_session
+from travel_assistant.services.policy_catalog import HOTEL_POLICY, CURRENT_RENTAL_POLICY
+from travel_assistant.services.rentals import (normalize_book_params, normalize_change_params,
                               rental_quote)
-from services.travel import OrderError
+from travel_assistant.services.travel import OrderError
 
 
 class ActionError(ValueError):

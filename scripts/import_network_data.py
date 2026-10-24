@@ -27,12 +27,12 @@ from travel_assistant.db.travel_models import (action_results, airports, audit_e
                               rental_products, pending_actions,
                               policy_documents, travelers)
 from scripts.verify_network_fixture import _shift, verify_fixture
-from services.city_products import generate_products
-from services.demo_pricing import (NETWORK_OFFER_RULE_ID, OFFER_VERSION,
+from travel_assistant.services.city_products import generate_products
+from travel_assistant.services.demo_pricing import (NETWORK_OFFER_RULE_ID, OFFER_VERSION,
                                    network_fare)
-from services.flight_schedule import (FLIGHT_SCHEDULE_RULE, fictional_duration,
+from travel_assistant.services.flight_schedule import (FLIGHT_SCHEDULE_RULE, fictional_duration,
                                       great_circle_km)
-from services.policy_catalog import SEED_POLICIES
+from travel_assistant.services.policy_catalog import SEED_POLICIES
 from travel_assistant.core.password_hash import get_hashed_password
 
 

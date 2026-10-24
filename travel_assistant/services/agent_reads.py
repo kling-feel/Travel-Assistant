@@ -8,14 +8,14 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 
 from travel_assistant.db.travel_models import airports, chat_turns, demo_state, flight_offers, flights, hotel_products, hotels
-from services.actions import ActionNotFound, _hotel_today, get_proposal
-from services.country_flights import find_country_flights
-from services.location_labels import airport_zh, amount_zh, city_zh, product_zh, room_zh
-from services.location_labels import CITY_ALIASES, EXTRA_CITY_ALIASES
-from services.weather_search import WeatherSearchError, search_weather
-from services.sessions import _owned_session
-from services.trip_discovery import discover_destinations
-from services.travel import (OrderError, find_earliest_flights, find_flights, find_hotels, find_rentals,
+from travel_assistant.services.actions import ActionNotFound, _hotel_today, get_proposal
+from travel_assistant.services.country_flights import find_country_flights
+from travel_assistant.services.location_labels import airport_zh, amount_zh, city_zh, product_zh, room_zh
+from travel_assistant.services.location_labels import CITY_ALIASES, EXTRA_CITY_ALIASES
+from travel_assistant.services.weather_search import WeatherSearchError, search_weather
+from travel_assistant.services.sessions import _owned_session
+from travel_assistant.services.trip_discovery import discover_destinations
+from travel_assistant.services.travel import (OrderError, find_earliest_flights, find_flights, find_hotels, find_rentals,
                              itinerary, policies)
 
 

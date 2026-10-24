@@ -23,9 +23,9 @@ from travel_assistant.db.travel_models import (action_results, audit_events, cha
                               rental_orders, rental_products, travelers,
                               airports)
 from main import Server
-from services.actions import create_proposal
-from services.demo_pricing import cancellation_fee
-from services.policy_catalog import HOTEL_POLICY_V3
+from travel_assistant.services.actions import create_proposal
+from travel_assistant.services.demo_pricing import cancellation_fee
+from travel_assistant.services.policy_catalog import HOTEL_POLICY_V3
 from travel_assistant.core.password_hash import get_hashed_password
 
 

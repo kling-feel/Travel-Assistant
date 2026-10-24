@@ -13,11 +13,11 @@ from sqlalchemy import select
 from travel_assistant.core.config import settings
 from travel_assistant.db.travel_models import (airports, demo_state, flight_offers, flight_orders,
                               flights, hotel_orders, hotel_products, hotels)
-from services.recommendation_geography import (airport_geography,
+from travel_assistant.services.recommendation_geography import (airport_geography,
                                                country_for_fixture_city,
                                                country_for_reachable_city)
-from services.reviewed_places import places_for_city, reviewed_places
-from services.location_labels import CITY_ALIASES as _CITY_ALIASES, city_zh
+from travel_assistant.services.reviewed_places import places_for_city, reviewed_places
+from travel_assistant.services.location_labels import CITY_ALIASES as _CITY_ALIASES, city_zh
 
 logger = logging.getLogger(__name__)
 

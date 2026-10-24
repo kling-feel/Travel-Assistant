@@ -10,9 +10,9 @@ from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from travel_assistant.db.travel_models import airports, flight_offers, flights
-from services.recommendation_geography import airport_geography
-from services.recommendations import ReviewedCatalogProvider, read_recommendation
-from services.reviewed_places import places_for_city, reviewed_places
+from travel_assistant.services.recommendation_geography import airport_geography
+from travel_assistant.services.recommendations import ReviewedCatalogProvider, read_recommendation
+from travel_assistant.services.reviewed_places import places_for_city, reviewed_places
 
 
 class FullCatalogTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class FullCatalogTests(unittest.TestCase):
             tampered.write_text("\n".join(current).replace(
                 "basel-minster|", "basel-other|", 1) + "\n", encoding="utf-8")
             reviewed_places.cache_clear()
-            with patch("services.reviewed_places._SOURCE", tampered):
+            with patch("travel_assistant.services.reviewed_places._SOURCE", tampered):
                 with self.assertRaises(ValueError):
                     reviewed_places()
         reviewed_places.cache_clear()

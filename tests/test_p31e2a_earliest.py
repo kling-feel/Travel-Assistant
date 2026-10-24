@@ -8,9 +8,9 @@ from sqlalchemy import insert, select, update
 
 from travel_assistant.db.travel_models import (airports, audit_events, flight_offers, flight_orders,
                               flights, pending_actions)
-from services.actions import create_proposal
-from services.dialogue_context import read_request, requested_actions
-from services.travel import find_earliest_flights
+from travel_assistant.services.actions import create_proposal
+from travel_assistant.services.dialogue_context import read_request, requested_actions
+from travel_assistant.services.travel import find_earliest_flights
 from tests import test_p26a_dialogue as dialogue_cases
 from tests import test_p31e1_transaction_journey as prior_cases
 
@@ -114,7 +114,7 @@ class EarliestJourneyTests(unittest.TestCase):
 
         with (model_patch, saver_patch,
               patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
-              patch("services.agent_reads.find_earliest_flights", side_effect=fixed_search),
+              patch("travel_assistant.services.agent_reads.find_earliest_flights", side_effect=fixed_search),
               client):
             auth = self.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -160,7 +160,7 @@ class EarliestJourneyTests(unittest.TestCase):
 
         with (model_patch, saver_patch,
               patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
-              patch("services.agent_reads.find_earliest_flights", side_effect=fixed_search),
+              patch("travel_assistant.services.agent_reads.find_earliest_flights", side_effect=fixed_search),
               client):
             auth = self.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -198,7 +198,7 @@ class EarliestJourneyTests(unittest.TestCase):
         original = find_earliest_flights
         with (model_patch, saver_patch,
               patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
-              patch("services.agent_reads.find_earliest_flights",
+              patch("travel_assistant.services.agent_reads.find_earliest_flights",
                     side_effect=lambda db, deps, arrs, **kwargs: original(
                         db, deps, arrs, now=NOW, **kwargs)), client):
             auth = self.fixture.fixture.auth(client, "demo1", "password1")
@@ -211,7 +211,7 @@ class EarliestJourneyTests(unittest.TestCase):
 
     def test_card_reuse_scope_quote_and_expiry(self):
         with self.engine.begin() as db:
-            from services.sessions import create_session
+            from travel_assistant.services.sessions import create_session
             one = create_session(db, "t1")
             other_session = create_session(db, "t1")
             other_user = create_session(db, "t2")

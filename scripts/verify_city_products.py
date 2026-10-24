@@ -14,8 +14,8 @@ from travel_assistant.db import engine
 from travel_assistant.db.travel_models import (airports, demo_state, hotel_orders, hotel_products,
                               hotels, pending_actions, rental_products)
 from main import Server
-from services.policy_catalog import CURRENT_POLICIES
-from services.travel import find_hotels, find_rentals
+from travel_assistant.services.policy_catalog import CURRENT_POLICIES
+from travel_assistant.services.travel import find_hotels, find_rentals
 
 
 def main():
