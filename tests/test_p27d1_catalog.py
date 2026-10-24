@@ -10,7 +10,7 @@ from unittest.mock import patch
 from services.recommendation_geography import country_for_fixture_city
 from services.reviewed_places import places_for_city, reviewed_places
 from services.recommendations import _CITY_ALIASES, _explicit_city
-from scripts.evaluate_p27c_sources import reachable_cities
+from scripts.verify_network_fixture import reachable_cities
 
 
 class ReviewedPlacesTests(unittest.TestCase):

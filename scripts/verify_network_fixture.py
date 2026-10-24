@@ -33,6 +33,20 @@ def _connect(path: Path) -> sqlite3.Connection:
     return connection
 
 
+def reachable_cities(path: Path = DEFAULT_SOURCE) -> list[str]:
+    """Read the scheduled arrival cities from the delivered fixture."""
+    with closing(_connect(path)) as db:
+        rows = db.execute(
+            "SELECT DISTINCT a.city FROM flights f "
+            "JOIN airports_data a ON a.airport_code=f.arrival_airport "
+            "WHERE f.status='Scheduled' ORDER BY a.city"
+        ).fetchall()
+    cities = [row["city"] for row in rows]
+    if len(cities) != 95:
+        raise RuntimeError("expected 95 reachable fixture cities")
+    return cities
+
+
 def _columns(db: sqlite3.Connection, table: str) -> tuple[str, ...]:
     return tuple(row[1] for row in db.execute(f"PRAGMA table_info({table})"))
 

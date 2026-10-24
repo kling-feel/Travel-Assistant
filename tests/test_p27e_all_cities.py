@@ -7,7 +7,7 @@ from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from db.travel_models import airports, flight_offers, flights
-from scripts.evaluate_p27c_sources import reachable_cities
+from scripts.verify_network_fixture import reachable_cities
 from services.recommendation_geography import airport_geography
 from services.recommendations import (_CITY_ALIASES, RecommendationSearchError,
                                       ReviewedCatalogProvider,

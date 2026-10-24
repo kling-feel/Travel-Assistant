@@ -15,6 +15,14 @@ class _Backend:
             "prompt_tokens": 100, "completion_tokens": 50}})
 
 
+class _MissingUsage(_Backend):
+    calls = 0
+
+    def invoke(self, _messages):
+        self.calls += 1
+        return SimpleNamespace(response_metadata={"token_usage": {}}, usage_metadata={})
+
+
 class _TimeoutThenSuccess(_Backend):
     calls = 0
 
@@ -30,6 +38,20 @@ class APITimeoutError(Exception):
 
 
 class MeterTests(unittest.TestCase):
+    def test_missing_usage_records_failure_and_stops_next_paid_request(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(
+                meter, "LEDGER", Path(folder) / "ledger.json"), patch(
+                    "scripts.run_p31h3_metered.get_chat_model",
+                    return_value=SimpleNamespace(backend=_MissingUsage())):
+            model = meter.CountedModel()
+            with self.assertRaisesRegex(RuntimeError, "usage missing"):
+                model.invoke([])
+            self.assertEqual(meter._rows()[0]["status"], "usage_missing")
+            with self.assertRaisesRegex(RuntimeError, "limit reached"):
+                model.invoke([])
+            self.assertEqual(model.backend.calls, 1)
+            self.assertEqual(len(meter._rows()), 1)
+
     def test_model_and_search_hard_stops(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(
                 meter, "LEDGER", Path(folder) / "ledger.json"), patch.object(
