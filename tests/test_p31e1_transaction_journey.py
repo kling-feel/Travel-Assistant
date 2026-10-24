@@ -62,7 +62,7 @@ class TransactionJourneyTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""},
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 21)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -92,7 +92,7 @@ class TransactionJourneyTests(unittest.TestCase):
                 {"action_type": "flight_book", "parameters": {"flight_id": 3831}}]},
              "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 21)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -111,7 +111,7 @@ class TransactionJourneyTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""},
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 21)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]

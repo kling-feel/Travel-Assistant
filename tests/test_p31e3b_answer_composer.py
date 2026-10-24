@@ -104,7 +104,7 @@ class AnswerComposerTests(unittest.TestCase):
                 "departure": "Shanghai", "arrival": "London", "travel_date": "2026-10-25"},
                 "answer": ""})
             client, model_patch, saver_patch = case.fixture.client(model)
-            with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+            with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                                 return_value=date(2026, 10, 20)), client:
                 auth = case.fixture.auth(client, "demo1", "password1")
                 sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -128,7 +128,7 @@ class AnswerComposerTests(unittest.TestCase):
                 {"intent": "general", "params": {}, "answer": ""},
                 {"intent": "general", "params": {}, "answer": ""})
             client, model_patch, saver_patch = case.fixture.client(model)
-            with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+            with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                                 return_value=date(2026, 10, 21)), client:
                 auth = case.fixture.auth(client, "demo1", "password1")
                 sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]

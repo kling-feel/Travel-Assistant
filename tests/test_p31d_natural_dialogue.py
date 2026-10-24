@@ -78,7 +78,7 @@ class NaturalDialogueTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": "请提供地点"},
             {"intent": "general", "params": {}, "answer": "请提供地点"})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 18)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -97,7 +97,7 @@ class NaturalDialogueTests(unittest.TestCase):
             {"intent": "hotel_search", "params": {}, "answer": ""},
             {"intent": "general", "params": {}, "answer": "不清楚"})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 18)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -133,7 +133,7 @@ class NaturalDialogueTests(unittest.TestCase):
     def test_combined_read_asks_only_missing_hotel_dates_then_resumes(self):
         model = dialogue_cases.ScriptedModel()
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 18)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]

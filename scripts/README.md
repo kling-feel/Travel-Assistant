@@ -2,7 +2,7 @@
 
 在项目根目录运行脚本；日常启动方法见[项目说明](../README.md)。本索引说明当前文件的用途与数据边界，**列出脚本不代表建议在已有正式演示库直接运行**。历史阶段评估的过程与结果保留在[企业项目文档](../docs/enterprise/当前进度.md)，一次性付费评估程序不再作为当前入口。
 
-脚本文件仍在本目录，调用方式不变；它们使用 `travel_assistant/core/` 中的配置和身份工具、`travel_assistant/db/` 中的数据库模型，以及 `travel_assistant/services/` 中的业务服务。迁移版本仍保留在根目录 `migrations/`。
+脚本文件仍在本目录，调用方式不变；它们使用 `travel_assistant/core/` 中的配置和身份工具、`travel_assistant/db/` 中的数据库模型，以及 `travel_assistant/services/` 中的业务服务；现行旅客接口和受控助手分别位于 `travel_assistant/api/`、`travel_assistant/agents/`。迁移版本仍保留在根目录 `migrations/`。
 
 ## 当前常用入口
 

@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, inspect, insert, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from api.travel import router
+from travel_assistant.api.travel import router
 from travel_assistant.core.config import settings
 from travel_assistant.db.travel_models import chat_messages, chat_sessions, travelers
 from migrations import v001_travel, v002_sessions

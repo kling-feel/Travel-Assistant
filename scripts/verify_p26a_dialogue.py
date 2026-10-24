@@ -72,7 +72,7 @@ def main():
             '{"intent":"flight_search","params":{"departure":"HAM","arrival":"BSL",'
             f'"travel_date":"{travel_date}"}},"answer":"模拟价格 9999"}}',
         ])
-        with patch("api.travel.get_chat_model", return_value=first_model):
+        with patch("travel_assistant.api.travel.get_chat_model", return_value=first_model):
             with TestClient(_app()) as client:
                 one = _auth(client, "demo1", passwords[0])
                 two = _auth(client, "demo2", passwords[1])
@@ -102,7 +102,7 @@ def main():
         second_model = FixedModel([
             '{"intent":"itinerary","params":{},"answer":""}',
         ])
-        with patch("api.travel.get_chat_model", return_value=second_model):
+        with patch("travel_assistant.api.travel.get_chat_model", return_value=second_model):
             with TestClient(_app()) as restarted:
                 one = _auth(restarted, "demo1", passwords[0])
                 itinerary = restarted.post(f"/api/v1/sessions/{sid}/turns", headers=one,

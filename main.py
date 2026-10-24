@@ -6,7 +6,7 @@ from travel_assistant.core.config import settings
 from travel_assistant.core import handler_error, cors
 
 from travel_assistant.core.log_config import init_log
-from api import routers
+from travel_assistant.api import routers
 from travel_assistant.paths import STATIC_DIR
 
 

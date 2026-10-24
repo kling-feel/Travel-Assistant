@@ -113,7 +113,7 @@ class EarliestJourneyTests(unittest.TestCase):
             return original(db, departures, arrivals, now=NOW, **kwargs)
 
         with (model_patch, saver_patch,
-              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
               patch("travel_assistant.services.agent_reads.find_earliest_flights", side_effect=fixed_search),
               client):
             auth = self.fixture.fixture.auth(client, "demo1", "password1")
@@ -159,7 +159,7 @@ class EarliestJourneyTests(unittest.TestCase):
             return original(db, departures, arrivals, now=NOW, **kwargs)
 
         with (model_patch, saver_patch,
-              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
               patch("travel_assistant.services.agent_reads.find_earliest_flights", side_effect=fixed_search),
               client):
             auth = self.fixture.fixture.auth(client, "demo1", "password1")
@@ -197,7 +197,7 @@ class EarliestJourneyTests(unittest.TestCase):
         client, model_patch, saver_patch = self.fixture.fixture.client(model)
         original = find_earliest_flights
         with (model_patch, saver_patch,
-              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
               patch("travel_assistant.services.agent_reads.find_earliest_flights",
                     side_effect=lambda db, deps, arrs, **kwargs: original(
                         db, deps, arrs, now=NOW, **kwargs)), client):

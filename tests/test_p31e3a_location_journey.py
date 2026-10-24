@@ -38,9 +38,9 @@ class LocationJourneyTests(unittest.TestCase):
     def _start(self, model):
         client, model_patch, saver_patch = self.fixture.client(model)
         patches = (model_patch, saver_patch,
-                   patch("graph_chat.controlled.local_today",
+                   patch("travel_assistant.agents.controlled.local_today",
                          return_value=date(2026, 10, 21)),
-                   patch("api.travel.get_recommendation_provider",
+                   patch("travel_assistant.api.travel.get_recommendation_provider",
                          return_value=ReviewedCatalogProvider()))
         return client, patches
 

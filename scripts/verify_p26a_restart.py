@@ -34,7 +34,7 @@ def prepare():
     if before["chat_sessions"] or before["chat_turns"] or before["pending_actions"]:
         raise RuntimeError("Restart check requires a clean demo snapshot")
     model = FixedModel(['{"intent":"policy","params":{"scope":"flight"},"answer":""}'])
-    with patch("api.travel.get_chat_model", return_value=model):
+    with patch("travel_assistant.api.travel.get_chat_model", return_value=model):
         with TestClient(_app()) as client:
             auth = _auth(client, "demo1", password)
             created = client.post("/api/v1/sessions", headers=auth, json={})
@@ -61,7 +61,7 @@ def finish():
     with open_checkpointer() as saver:
         assert saver.get_tuple({"configurable": {"thread_id": sid}}) is not None
     model = FixedModel(['{"intent":"itinerary","params":{},"answer":""}'])
-    with patch("api.travel.get_chat_model", return_value=model):
+    with patch("travel_assistant.api.travel.get_chat_model", return_value=model):
         with TestClient(_app()) as client:
             auth = _auth(client, "demo1", password)
             turn = client.post(f"/api/v1/sessions/{sid}/turns", headers=auth,

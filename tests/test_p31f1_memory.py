@@ -7,7 +7,7 @@ from unittest.mock import patch
 from sqlalchemy import select, update
 
 from travel_assistant.db.travel_models import audit_events, flight_orders, pending_actions
-from graph_chat.controlled import _fresh_flight_candidates
+from travel_assistant.agents.controlled import _fresh_flight_candidates
 from travel_assistant.services.dialogue_context import read_request
 from travel_assistant.services.model_config import ModelUnavailable
 from travel_assistant.services.travel import find_earliest_flights
@@ -50,7 +50,7 @@ class WorkMemoryTests(unittest.TestCase):
         client, model_patch, saver_patch = self.fixture.fixture.fixture.client(model)
         original = find_earliest_flights
         return (client, model_patch, saver_patch,
-                patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
+                patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
                 patch("travel_assistant.services.agent_reads.find_earliest_flights",
                       side_effect=lambda db, deps, arrs, **kwargs: original(
                           db, deps, arrs, now=NOW, **kwargs)))
@@ -86,7 +86,7 @@ class WorkMemoryTests(unittest.TestCase):
             for index in range(4, 26):
                 other = self._turn(client, sid, auth, index, "你好")
                 self.assertEqual(other["actions"], [])
-            with patch("api.travel.get_chat_model", side_effect=ModelUnavailable("offline")):
+            with patch("travel_assistant.api.travel.get_chat_model", side_effect=ModelUnavailable("offline")):
                 memory = self._turn(client, sid, auth, 26, "你记得我们前面说过什么吗")
             self.assertIn("从上海", memory["answer"])
             self.assertIn("去伦敦", memory["answer"])
@@ -120,7 +120,7 @@ class WorkMemoryTests(unittest.TestCase):
             isolated = self._turn(client, other_sid, auth, 24,
                                   "我要预订前面 SIM-3832 航班")
             self.assertEqual(isolated["actions"], [])
-            with patch("api.travel.get_chat_model", side_effect=ModelUnavailable("offline")):
+            with patch("travel_assistant.api.travel.get_chat_model", side_effect=ModelUnavailable("offline")):
                 other_memory = self._turn(client, other_sid, auth, 25,
                                           "你记得前面说过什么吗")
             self.assertNotIn("伦敦", other_memory["answer"])

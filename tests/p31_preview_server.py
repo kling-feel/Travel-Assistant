@@ -116,8 +116,8 @@ def preview_app():
     app.dependency_overrides[get_db] = test_db
     settings.JWT_SECRET_KEY = "preview-only-fixed-secret-never-use-in-production"
     saver = InMemorySaver()
-    model_patch = patch("api.travel.get_chat_model", return_value=FixedModel(tomorrow))
-    saver_patch = patch("api.travel.open_checkpointer", return_value=nullcontext(saver))
+    model_patch = patch("travel_assistant.api.travel.get_chat_model", return_value=FixedModel(tomorrow))
+    saver_patch = patch("travel_assistant.api.travel.open_checkpointer", return_value=nullcontext(saver))
     return app, engine, model_patch, saver_patch, tomorrow
 
 
@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
     preview, _, model, saver, _ = preview_app()
     if os.getenv("P31_NO_MODEL") == "1":
-        model = patch("api.travel.get_chat_model",
+        model = patch("travel_assistant.api.travel.get_chat_model",
                       side_effect=ModelUnavailable("preview model disabled"))
     with model, saver:
         uvicorn.run(preview, host="127.0.0.1",

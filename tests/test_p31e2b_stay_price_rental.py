@@ -13,7 +13,7 @@ from travel_assistant.services.dialogue_context import read_request, rental_cloc
 from travel_assistant.services.agent_proposals import SelectionNeeded, prepare_actions
 from travel_assistant.services.policy_catalog import CURRENT_POLICIES
 from travel_assistant.services.travel import find_hotels, find_rentals
-from graph_chat.controlled import _fresh_offer_candidates
+from travel_assistant.agents.controlled import _fresh_offer_candidates
 from tests import test_p26a_dialogue as dialogue_cases
 
 
@@ -43,7 +43,7 @@ class StayPriceRentalTests(unittest.TestCase):
             "actions": [{"action_type": "flight_book", "parameters": {"flight_id": 901}}]},
             "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 23)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -125,8 +125,8 @@ class StayPriceRentalTests(unittest.TestCase):
                 "travel_date": "2026-10-25"}}]}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(wrong_model)
         with (model_patch, saver_patch,
-              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 23)),
-              patch("api.travel.local_today", return_value=date(2026, 10, 23)),
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 23)),
+              patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 23)),
               patch("travel_assistant.services.actions.datetime", _FixedActionClock), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -196,8 +196,8 @@ class StayPriceRentalTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
         with (model_patch, saver_patch,
-              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
-              patch("api.travel.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 21)),
               patch("travel_assistant.services.actions._hotel_today", return_value=date(2026, 10, 21)), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -220,9 +220,9 @@ class StayPriceRentalTests(unittest.TestCase):
         model = dialogue_cases.ScriptedModel(
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 22)), patch(
-                                                "api.travel.local_today",
+                                                "travel_assistant.api.travel.local_today",
                                                 return_value=date(2026, 10, 22)), patch(
                                                     "travel_assistant.services.actions.datetime", _FixedActionClock), client:
             auth = self.fixture.auth(client, "demo1", "password1")
@@ -251,7 +251,7 @@ class StayPriceRentalTests(unittest.TestCase):
         model = dialogue_cases.ScriptedModel(
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 22)), patch(
                                                 "travel_assistant.services.actions.datetime", _FixedActionClock), client:
             auth = self.fixture.auth(client, "demo1", "password1")
@@ -283,7 +283,7 @@ class StayPriceRentalTests(unittest.TestCase):
                 rental_products.c.id == "rental-SHA-12").values(daily_price=180))
         model = dialogue_cases.ScriptedModel()
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=base), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -323,7 +323,7 @@ class StayPriceRentalTests(unittest.TestCase):
                 hotel_products.c.id == "room-SHA-12").values(nightly_price=250))
         model = dialogue_cases.ScriptedModel()
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 21)), client:
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]

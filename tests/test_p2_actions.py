@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, delete, insert, inspect, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from api.travel import router
+from travel_assistant.api.travel import router
 from travel_assistant.core.config import settings
 from travel_assistant.db.travel_models import (airports, chat_sessions, flight_offers, flight_orders,
                               flights, hotel_orders, hotel_products, hotels,

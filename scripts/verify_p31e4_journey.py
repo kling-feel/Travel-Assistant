@@ -105,8 +105,8 @@ def prepare():
     assert before["pending_actions"] == 0, before
     report = {"date": date.today().isoformat(), "before": before, "turns": []}
     model = FixedModel()
-    with (patch("api.travel.get_chat_model", return_value=model),
-          patch("api.travel.get_recommendation_provider",
+    with (patch("travel_assistant.api.travel.get_chat_model", return_value=model),
+          patch("travel_assistant.api.travel.get_recommendation_provider",
                 return_value=ReviewedCatalogProvider()),
           TestClient(app()) as client):
         one, two = login(client, 1), login(client, 2)
@@ -186,8 +186,8 @@ def finish():
     sid = state["session_id"]
     before = state["before"]
     model = FixedModel()
-    with (patch("api.travel.get_chat_model", return_value=model),
-          patch("api.travel.get_recommendation_provider",
+    with (patch("travel_assistant.api.travel.get_chat_model", return_value=model),
+          patch("travel_assistant.api.travel.get_recommendation_provider",
                 return_value=ReviewedCatalogProvider()),
           TestClient(app()) as client):
         one, two = login(client, 1), login(client, 2)

@@ -126,7 +126,7 @@ def main():
     provider_search = CleverSeeRecommendationProvider.search
     server = Server()
     server.init_app()
-    with (patch("api.travel.get_chat_model", return_value=model),
+    with (patch("travel_assistant.api.travel.get_chat_model", return_value=model),
           patch.object(CleverSeeRecommendationProvider, "search",
                        _count_search(provider_search, "place")),
           patch("travel_assistant.services.agent_reads.search_weather",

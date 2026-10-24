@@ -44,7 +44,7 @@ from travel_assistant.services.checkpoints import open_checkpointer
 from travel_assistant.services.model_config import ModelUnavailable, get_chat_model
 from travel_assistant.services.recommendations import (get_recommendation_provider,
                                       read_recommendation)
-from graph_chat.controlled import build_graph
+from travel_assistant.agents.controlled import build_graph
 from travel_assistant.core.dependencies import get_db
 from travel_assistant.core.password_hash import verify_password
 

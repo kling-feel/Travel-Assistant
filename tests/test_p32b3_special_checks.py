@@ -29,7 +29,7 @@ class SpecialChecksTests(unittest.TestCase):
                                      "answer": "景点已预订"})
         client, model_patch, saver_patch = self.fixture.client(first_model)
         with model_patch, saver_patch, patch(
-                "api.travel.get_recommendation_provider", return_value=provider), client:
+                "travel_assistant.api.travel.get_recommendation_provider", return_value=provider), client:
             owner = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=owner, json={}).json()["id"]
             first = self.fixture.turn(client, sid, owner, "place-before-restart",
@@ -43,7 +43,7 @@ class SpecialChecksTests(unittest.TestCase):
                                       "answer": ""})
         recreated, model_patch, saver_patch = self.fixture.client(second_model)
         with model_patch, saver_patch, patch(
-                "api.travel.get_recommendation_provider", return_value=provider), recreated:
+                "travel_assistant.api.travel.get_recommendation_provider", return_value=provider), recreated:
             owner = self.fixture.auth(recreated, "demo1", "password1")
             outsider = self.fixture.auth(recreated, "demo2", "password2")
             second = self.fixture.turn(recreated, sid, owner, "place-after-restart",

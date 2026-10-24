@@ -54,7 +54,7 @@ class CountryBookingTests(unittest.TestCase):
         client, model_patch, saver_patch = self.fixture.fixture.fixture.client(model)
         original_search = find_earliest_flights
         with (model_patch, saver_patch,
-              patch("graph_chat.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
               patch("travel_assistant.services.country_flights._utc_now", return_value=NOW),
               patch("travel_assistant.services.agent_reads.find_earliest_flights",
                     side_effect=lambda db, deps, arrs, **kwargs: original_search(
@@ -186,7 +186,7 @@ class CountryBookingTests(unittest.TestCase):
             auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             self.turn(client, sid, auth, 51, "从伦敦到中国，订最早的机票")
-            with patch("graph_chat.controlled.datetime", wraps=datetime) as clock:
+            with patch("travel_assistant.agents.controlled.datetime", wraps=datetime) as clock:
                 clock.now.return_value = datetime.now(timezone.utc) + timedelta(minutes=16)
                 expired = self.turn(client, sid, auth, 52, "选第一个城市")
             self.assertEqual(expired["actions"], [])

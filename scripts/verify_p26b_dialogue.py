@@ -166,7 +166,7 @@ def prepare():
             ("hotel_book", {"product_id": "missing-hotel-product",
                             "check_in": day, "check_out": next_day})))
         model = FixedModel(decisions)
-        with patch("api.travel.get_chat_model", return_value=model):
+        with patch("travel_assistant.api.travel.get_chat_model", return_value=model):
             with TestClient(_app()) as client:
                 auth = _auth(client, owner, password)
                 foreign = _auth(client, outsider, password)
@@ -212,7 +212,7 @@ def finish():
     sid = state["session"]
     with open_checkpointer() as saver:
         assert saver.get_tuple({"configurable": {"thread_id": sid}}) is not None
-    with patch("api.travel.get_chat_model", return_value=FixedModel([])):
+    with patch("travel_assistant.api.travel.get_chat_model", return_value=FixedModel([])):
         with TestClient(_app()) as client:
             auth = _auth(client, state["owner"], state["password"])
             # Replaying the saved key needs no model invocation.

@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, insert, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from api.travel import router
+from travel_assistant.api.travel import router
 from travel_assistant.core.config import settings
 from travel_assistant.db.travel_models import (airports, chat_messages, chat_turns, demo_state, flight_offers,
                               flight_orders, flights, metadata, pending_actions,
@@ -119,8 +119,8 @@ class DialogueTests(unittest.TestCase):
 
     def client(self, model):
         return (TestClient(self.app()),
-                patch("api.travel.get_chat_model", return_value=model),
-                patch("api.travel.open_checkpointer", return_value=nullcontext(self.saver)))
+                patch("travel_assistant.api.travel.get_chat_model", return_value=model),
+                patch("travel_assistant.api.travel.open_checkpointer", return_value=nullcontext(self.saver)))
 
     @staticmethod
     def auth(client, username, password):
@@ -153,7 +153,7 @@ class DialogueTests(unittest.TestCase):
             replay = self.turn(client, sid, one, "policy-001", "机票取消规则是什么？")
             self.assertEqual(replay.status_code, 200)
             self.assertEqual(replay.json(), body)
-            with patch("api.travel.get_chat_model",
+            with patch("travel_assistant.api.travel.get_chat_model",
                        side_effect=ModelUnavailable("offline")):
                 offline_replay = self.turn(client, sid, one, "policy-001",
                                            "机票取消规则是什么？")
@@ -327,7 +327,7 @@ class DialogueTests(unittest.TestCase):
             {"intent": "hotel_search", "params": {"city": "Basel"}, "answer": ""},
         )
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("graph_chat.controlled.local_today",
+        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
                                             return_value=date(2026, 10, 18)), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -366,7 +366,7 @@ class DialogueTests(unittest.TestCase):
         with TestClient(self.app()) as client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
-            with patch("api.travel.get_chat_model",
+            with patch("travel_assistant.api.travel.get_chat_model",
                        side_effect=ModelUnavailable("AI_API_KEY is not configured")):
                 response = self.turn(client, sid, auth, "no-model-001", "你好")
             self.assertEqual(response.status_code, 503)
@@ -399,7 +399,7 @@ class DialogueTests(unittest.TestCase):
         model = ScriptedModel({"intent": "recommendation", "params": {"city": "Basel"},
                                "answer": "景点已预订"})
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             one = self.auth(client, "demo1", "password1")
             two = self.auth(client, "demo2", "password2")
@@ -435,7 +435,7 @@ class DialogueTests(unittest.TestCase):
         model = ScriptedModel({"intent": "recommendation", "params": {"city": "Basel"},
                                "answer": ""})
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -454,7 +454,7 @@ class DialogueTests(unittest.TestCase):
         model = ScriptedModel({"intent": "recommendation", "params": {"city": "Basel"},
                                "answer": ""})
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -473,7 +473,7 @@ class DialogueTests(unittest.TestCase):
         model = ScriptedModel({"intent": "recommendation", "params": {"city": "Basel"},
                                "answer": ""})
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -487,7 +487,7 @@ class DialogueTests(unittest.TestCase):
         model = ScriptedModel({"intent": "recommendation", "params": {"city": "Basel"},
                                "answer": ""})
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -503,7 +503,7 @@ class DialogueTests(unittest.TestCase):
             db.execute(update(airports).where(airports.c.code == "BSL").values(
                 timezone="America/New_York"))
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -527,7 +527,7 @@ class DialogueTests(unittest.TestCase):
             {"intent": "recommendation", "params": {"city": "Basel"}, "answer": ""},
         )
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             one = self.auth(client, "demo1", "password1")
             two = self.auth(client, "demo2", "password2")
@@ -556,7 +556,7 @@ class DialogueTests(unittest.TestCase):
              "answer": "Basel Minster is open today"},
         )
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -604,7 +604,7 @@ class DialogueTests(unittest.TestCase):
             {"intent": "recommendation", "params": {"city": "Basel"},
              "answer": "可以买门票"})
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -655,7 +655,7 @@ class DialogueTests(unittest.TestCase):
             {"action_type": "hotel_book", "parameters": {"product_id": "room-1"}}]},
             "answer": "已订门票"})
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -680,7 +680,7 @@ class DialogueTests(unittest.TestCase):
         model = ScriptedModel({"intent": "recommendation", "params": {"city": "Basel"},
                                "answer": "Basel Minster charges 50 euros"})
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -698,7 +698,7 @@ class DialogueTests(unittest.TestCase):
             {"intent": "recommendation", "params": {"city": "Basel"}, "answer": "门票 50 元"},
         )
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=ReviewedCatalogProvider()), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
@@ -730,7 +730,7 @@ class DialogueTests(unittest.TestCase):
             {"intent": "recommendation", "params": {"city": "Basel"}, "answer": ""},
         )
         client, model_patch, saver_patch = self.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=provider), client:
             auth = self.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]

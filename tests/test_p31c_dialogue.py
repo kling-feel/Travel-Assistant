@@ -119,7 +119,7 @@ class RealConversationRegressions(unittest.TestCase):
                 flight_id=2, amount=200, version=1, rule_id="network-fare-v1"))
         model = dialogue_cases.ScriptedModel()
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("api.travel.get_recommendation_provider",
+        with model_patch, saver_patch, patch("travel_assistant.api.travel.get_recommendation_provider",
                                              return_value=ReviewedCatalogProvider()), client:
             one = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=one, json={}).json()["id"]

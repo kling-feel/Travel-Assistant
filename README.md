@@ -6,7 +6,7 @@
 
 当前页面文件位于 `travel_assistant/web/static/`，由根目录 `main.py` 继续以 `/app` 和 `/static/*` 提供；项目根目录的 `.env` 与 `data/fixtures/` 仍是配置和交付样本的位置。目录整理期间的当前模块位置见[软件架构](docs/enterprise/软件架构.md)，日常启动命令不变。
 
-配置、身份与通用 HTTP 处理位于 `travel_assistant/core/`，数据库连接和当前表模型位于 `travel_assistant/db/`，航班、住宿、租车、订单与推荐服务位于 `travel_assistant/services/`。版本化迁移仍从根目录 `migrations/` 运行；脚本与测试的入口路径保持原样。
+配置、身份与通用 HTTP 处理位于 `travel_assistant/core/`，数据库连接和当前表模型位于 `travel_assistant/db/`，航班、住宿、租车、订单与推荐服务位于 `travel_assistant/services/`，受控助手和旅客接口分别位于 `travel_assistant/agents/`、`travel_assistant/api/`。版本化迁移仍从根目录 `migrations/` 运行；脚本与测试的入口路径保持原样。
 
 P3.1e4 的隔离测试启动、登录与验收步骤见[本机操作指南](docs/enterprise/P3.1e4-验收记录与本机操作指南.md)。跨洲航班排程已按[排程质量计划](docs/enterprise/操作计划/P3.1e5-航班时长与到达日质量修复.md)修复并在正式演示库验收；它仍是虚构展示时间，不能用于真实行程。
 
