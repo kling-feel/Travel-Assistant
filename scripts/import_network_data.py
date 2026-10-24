@@ -27,6 +27,7 @@ from travel_assistant.db.travel_models import (action_results, airports, audit_e
                               rental_products, pending_actions,
                               policy_documents, travelers)
 from scripts.verify_network_fixture import _shift, verify_fixture
+from scripts.migrate import MIGRATIONS
 from travel_assistant.services.city_products import generate_products
 from travel_assistant.services.demo_pricing import (NETWORK_OFFER_RULE_ID, OFFER_VERSION,
                                    network_fare)
@@ -38,6 +39,42 @@ from travel_assistant.core.password_hash import get_hashed_password
 
 FIXTURE = ROOT / "data" / "fixtures" / "network_source.sqlite"
 FLIGHT_BATCH = 1000
+
+
+def assert_fresh_batch_target(connection, expected_port: int):
+    """Reject a reused or misdirected database before a new batch is seeded."""
+    if expected_port == 5433:
+        raise RuntimeError("The existing demo database port cannot be a fresh batch target")
+    if os.getenv("DATABASE_URL"):
+        raise RuntimeError("DATABASE_URL overrides the batch port; refusing to write")
+    url = engine.url
+    if (url.drivername != "postgresql+psycopg" or
+            url.host != "127.0.0.1" or url.port != expected_port or
+            url.database != "travel_demo" or url.username != "travel_app"):
+        raise RuntimeError("Effective database target does not match the fresh batch")
+    if connection.dialect.name != "postgresql":
+        raise RuntimeError("Fresh batch requires PostgreSQL")
+    versions = set(connection.execute(text("SELECT version FROM schema_migrations")).scalars())
+    if versions != {migration.VERSION for migration in MIGRATIONS}:
+        raise RuntimeError("Fresh batch requires all 13 schema migrations")
+    for table in (demo_state, travelers, airports, flights, flight_offers, hotels,
+                  hotel_products, rental_products, flight_orders, hotel_orders,
+                  rental_orders, chat_sessions, chat_messages, chat_turns,
+                  pending_actions, action_results, audit_events):
+        if connection.execute(select(func.count()).select_from(table)).scalar_one():
+            raise RuntimeError(f"Fresh batch is not empty: {table.name}")
+    existing_policies = connection.execute(select(policy_documents)).mappings()
+    if not seed_policies_match(existing_policies):
+        raise RuntimeError("Fresh batch has unexpected policy records")
+    if connection.execute(text("SELECT to_regclass('public.checkpoints')")).scalar_one():
+        for name in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+            if connection.execute(text(f"SELECT count(*) FROM {name}")).scalar_one():
+                raise RuntimeError(f"Fresh batch is not empty: {name}")
+
+
+def seed_policies_match(rows):
+    return sorted((dict(row) for row in rows), key=lambda item: item["id"]) == sorted(
+        (dict(row) for row in SEED_POLICIES), key=lambda item: item["id"])
 
 
 def _utc_shift(value: str | None, shift: timedelta):
@@ -237,12 +274,14 @@ def _formal_reset(connection, as_of, passwords, fixture_sha256, products):
 
 
 def apply_snapshot(airport_rows, flight_rows, offer_rows, as_of, passwords,
-                   fixture_sha256):
+                   fixture_sha256, fresh_batch_port=None):
     products = generate_products(airport_rows, flight_rows, offer_rows, as_of)
     with engine.begin() as connection:
         if connection.dialect.name != "postgresql":
             raise RuntimeError("Network import requires PostgreSQL")
         connection.execute(text("SELECT pg_advisory_xact_lock(hashtext('travel_demo_reset'))"))
+        if fresh_batch_port is not None:
+            assert_fresh_batch_target(connection, fresh_batch_port)
         _stage(connection, airport_rows, flight_rows, offer_rows)
         _formal_reset(connection, as_of, passwords, fixture_sha256, products)
 
@@ -256,9 +295,15 @@ def main():
                         help="Acknowledge that existing demo orders and sessions are replaced")
     parser.add_argument("--backup", type=Path,
                         help="Existing verified local pg_dump file; required for --apply")
+    parser.add_argument("--fresh-batch-port", type=int,
+                        help="Require this isolated port and an empty migrated database")
     args = parser.parse_args()
+    if args.fresh_batch_port is not None and not 1 <= args.fresh_batch_port <= 65535:
+        parser.error("--fresh-batch-port must be a valid port")
     airports_data, flights_data, offers_data, report = prepare_snapshot(args.source, args.as_of)
     with engine.connect() as connection:
+        if args.fresh_batch_port is not None:
+            assert_fresh_batch_target(connection, args.fresh_batch_port)
         current = {table.name: connection.execute(
             select(func.count()).select_from(table)).scalar_one()
             for table in (travelers, flights, flight_orders, hotel_orders, rental_orders,
@@ -283,7 +328,7 @@ def main():
         parser.error("Configure the two local demo passwords first")
     fixture_sha256 = hashlib.sha256(args.source.read_bytes()).hexdigest()
     apply_snapshot(airports_data, flights_data, offers_data, args.as_of, passwords,
-                   fixture_sha256)
+                   fixture_sha256, args.fresh_batch_port)
     print("Network snapshot applied and committed")
 
 

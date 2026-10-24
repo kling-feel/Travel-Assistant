@@ -24,8 +24,16 @@ def main():
     parser.add_argument("--as-of", type=date.fromisoformat, default=date.today())
     parser.add_argument("--formal-read-only", action="store_true",
                         help="Explicitly audit the default demo DB after its approved rebuild")
+    parser.add_argument("--isolated-port", type=int,
+                        help="Audit a verified isolated demo batch on this local port")
     args = parser.parse_args()
-    expected_port = 5433 if args.formal_read_only else 5434
+    if args.formal_read_only and args.isolated_port is not None:
+        parser.error("Choose either the formal database or an isolated port")
+    if args.isolated_port is not None and not 1024 <= args.isolated_port <= 65535:
+        parser.error("--isolated-port must be a valid non-privileged port")
+    if args.isolated_port == 5433:
+        parser.error("Use --formal-read-only for the default demo database")
+    expected_port = args.isolated_port or (5433 if args.formal_read_only else 5434)
     if settings.POSTGRES_PORT != expected_port or settings.DATABASE_URL:
         raise RuntimeError(f"Audit requires the selected local DB on port {expected_port}")
     with engine.connect() as db:
@@ -100,9 +108,11 @@ def main():
     }
     if long_under_five or landing_unavailable:
         raise AssertionError("Schedule or landing hotel supply failed full audit")
-    output = ROOT / ("data/generated/p31e6-formal-schedule-audit.json"
-                     if args.formal_read_only
-                     else "data/generated/p31e5-schedule-audit.json")
+    output = ROOT / (f"data/generated/schedule-audit-{expected_port}.json"
+                     if args.isolated_port is not None else
+                     "data/generated/p31e6-formal-schedule-audit.json"
+                     if args.formal_read_only else
+                     "data/generated/p31e5-schedule-audit.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2),
                       encoding="utf-8")

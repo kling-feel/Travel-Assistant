@@ -17,6 +17,7 @@ from travel_assistant.db.travel_models import (airports, demo_state, flight_offe
                               flights, hotel_orders, hotel_products, hotels,
                               policy_documents, rental_products, travelers)
 from scripts.import_network_data import FIXTURE
+from scripts.verify_network_fixture import verify_fixture
 from main import Server
 from travel_assistant.services.travel import find_flights
 
@@ -26,13 +27,14 @@ def main():
     with engine.connect() as db:
         state = db.execute(select(demo_state)).mappings().one()
         as_of = state["as_of"]
+        expected_offers = verify_fixture(FIXTURE, (as_of,))["windows"][as_of.isoformat()]["scheduled_flights"]
         assert state["fixture_sha256"] == hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
         counts = {table.name: db.execute(select(func.count()).select_from(table)).scalar_one()
                   for table in (airports, flights, flight_offers, travelers,
                                 flight_orders, hotel_orders, hotels,
                                 hotel_products, rental_products, policy_documents)}
         assert counts == {"airports": 115, "flights": 33121,
-                          "flight_offers": 15374, "travelers": 2,
+                          "flight_offers": expected_offers, "travelers": 2,
                           "flight_orders": 2, "hotel_orders": 2,
                           "hotels": 312, "hotel_products": 312,
                           "rental_products": 208, "policy_documents": 10}, counts

@@ -21,8 +21,11 @@
 | `build_network_fixture.py` | 从获授权原始 SQLite 导出无旅客信息的交付样本 | 只读输入、写指定新输出；拒绝覆盖。日常运行不依赖 `data/source/` |
 | `build_recommendation_geography.py` | 从交付样本和时区资料生成城市地理表 | 只读样本，写生成文件；仅在样本变更后使用 |
 | `verify_network_fixture.py` | 核对交付样本、两日期排程与可达城市 | 只读 SQLite；无需 PostgreSQL、模型或联网密钥 |
-| `migrate.py` | 执行版本化 PostgreSQL 迁移 | **写数据库结构和迁移记录**；仅对已核对的目标库运行，升级前备份 |
-| `import_network_data.py` | 导入／按新演示日重置全航线模拟数据 | 不带 `--apply` 只预览；带 `--apply --reset-demo --backup` 会**替换演示订单、会话与动作记录**，须先核对目标端口和备份；不能在演示中静默运行 |
+| `batch_environment.py` | 为新演示批次创建独立本机凭证，并用该配置运行指定命令 | 文件只写入 Git 忽略的 `data/generated/`；不会输出凭证，拒绝覆盖已有文件；运行时清空旧连接串并关闭付费服务密钥 |
+| `inspect_demo_batch.py` | 只读摘要指定端口的演示库日期、数量、订单状态与迁移 | 仅输出脱敏计数和摘要，不读取消息正文、密码或令牌；须先核对实际容器和端口 |
+| `verify_batch_token_isolation.py` | 验证旧批次签名的短时令牌在新批次返回 401，且新批次账号可以正常登录 | 只在已核对的隔离数据库运行；仅输出状态码，不输出令牌或密码，不创建订单 |
+| `migrate.py` | 执行版本化 PostgreSQL 迁移 | **写数据库结构和迁移记录**；新批次须加 `--fresh-batch-port`，在首个结构写入前拒绝错误端口、连接串覆盖和已有表；升级前备份 |
+| `import_network_data.py` | 导入／按新演示日重置全航线模拟数据 | 不带 `--apply` 只预览；新批次加 `--fresh-batch-port`，要求 13 版迁移和空业务库；带 `--apply --reset-demo --backup` 会**替换演示订单、会话与动作记录**，须先核对目标端口和备份；不能在演示中静默运行 |
 | `verify_network_data.py` | 核对导入后的机场、航线、产品和种子订单 | 只读所连接的 PostgreSQL；先核对目标库 |
 | `audit_p31e5_schedule.py` | 全量核对虚构航班时长、到达日及落地酒店覆盖 | 只读 PostgreSQL；正式库需显式 `--formal-read-only`，且先核对目标端口 |
 | `audit_p26d_secrets.py` | 检查 Git 中疑似凭证暴露，不打印凭证值 | 只读仓库；发布前可运行，发现疑点需人工核对 |
