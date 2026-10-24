@@ -2,7 +2,7 @@
 
 这是一个使用虚构数据的旅行助手求职作品，保留 FastAPI 和 LangGraph 主助手／专门助手结构。**P3.1 旅客页面、多轮对话改进、交易确认与流式交互已发布到 main；本机与 GitHub 主线同步。**旅客可以在 `/app` 登录、进行多轮对话、查询本人行程和航班／酒店／租车、读取虚构平台政策，并为九类交易生成待确认卡；旅客须逐笔确认或拒绝，未确认不会修改订单。现有 95 座可达城市、每城 2 个经逐页核查的经典地点。配置阿里云密钥后，联网检索默认开启。游览预订不在最终范围。旧交易接口始终不注册。
 
-项目方案见 [产品需求](docs/enterprise/产品需求.md)、[软件架构](docs/enterprise/软件架构.md) 和 [当前进度](docs/enterprise/当前进度.md)。当前脚本的用途、数据库写入范围和付费调用条件见[脚本入口索引](scripts/README.md)；已结束阶段的专项验收命令以历史文档保存，不作为日常启动步骤。
+项目文档从[企业项目文档导航](docs/enterprise/README.md)进入；当前方案见 [产品需求](docs/enterprise/产品需求.md)、[软件架构](docs/enterprise/软件架构.md) 和 [当前进度](docs/enterprise/当前进度.md)。当前脚本的用途、数据库写入范围和付费调用条件见[脚本入口索引](scripts/README.md)；已结束阶段的专项验收命令以历史文档保存，不作为日常启动步骤。
 
 当前页面文件位于 `travel_assistant/web/static/`，由根目录 `main.py` 继续以 `/app` 和 `/static/*` 提供；项目根目录的 `.env` 与 `data/fixtures/` 仍是配置和交付样本的位置。目录整理期间的当前模块位置见[软件架构](docs/enterprise/软件架构.md)，日常启动命令不变。
 
@@ -19,7 +19,7 @@
 | `migrations/`、`data/fixtures/` | 版本化迁移与可交付虚构样本 |
 | [`scripts/`](scripts/README.md) | 本机准备、数据核验与专项验收命令；先看读写／费用边界 |
 | [`tests/`](tests/README.md) | 按业务、对话、推荐、页面分组的自动化回归 |
-| [`docs/enterprise/`](docs/enterprise/当前进度.md) | 当前需求、架构、进度与保留的阶段记录 |
+| [`docs/enterprise/`](docs/enterprise/README.md) | 当前需求、架构、进度与保留的阶段记录 |
 
 
 P3.1e4 的隔离测试启动、登录与验收步骤见[本机操作指南](docs/enterprise/P3.1e4-验收记录与本机操作指南.md)。跨洲航班排程已按[排程质量计划](docs/enterprise/操作计划/P3.1e5-航班时长与到达日质量修复.md)修复并在正式演示库验收；它仍是虚构展示时间，不能用于真实行程。
