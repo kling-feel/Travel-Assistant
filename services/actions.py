@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import insert, select
 
-from db.travel_models import (airports, audit_events, demo_state, flight_offers, flight_orders, flights, hotel_orders,
+from travel_assistant.db.travel_models import (airports, audit_events, demo_state, flight_offers, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, pending_actions,
                               policy_documents)
 from services.demo_pricing import (FLIGHT_POLICY, NETWORK_OFFER_RULE_ID,

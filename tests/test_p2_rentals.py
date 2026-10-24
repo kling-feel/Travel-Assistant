@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from db.travel_models import (action_results, demo_state, policy_documents,
+from travel_assistant.db.travel_models import (action_results, demo_state, policy_documents,
                               rental_orders, rental_products)
 from migrations import v006_demo_state
 from services.actions import ActionError, create_proposal

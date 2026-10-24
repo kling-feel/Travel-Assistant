@@ -20,8 +20,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from config import settings
-from db.travel_models import airports, travelers
+from travel_assistant.core.config import settings
+from travel_assistant.db.travel_models import airports, travelers
 from services.location_labels import airport_zh, city_zh, product_zh, amount_zh
 from services.travel import (OrderError, find_flights, find_hotels, find_rentals,
                              itinerary, policies)
@@ -45,8 +45,8 @@ from services.model_config import ModelUnavailable, get_chat_model
 from services.recommendations import (get_recommendation_provider,
                                       read_recommendation)
 from graph_chat.controlled import build_graph
-from utils.dependencies import get_db
-from utils.password_hash import verify_password
+from travel_assistant.core.dependencies import get_db
+from travel_assistant.core.password_hash import verify_password
 
 
 router = APIRouter()

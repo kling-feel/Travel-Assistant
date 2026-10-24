@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, func
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from db import engine
-from db.travel_models import (airports, demo_state, flight_offers, flight_orders,
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import (airports, demo_state, flight_offers, flight_orders,
                               flights, hotel_orders, hotel_products,
                               policy_documents, rental_products, travelers)
 from main import Server

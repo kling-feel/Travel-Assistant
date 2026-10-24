@@ -5,7 +5,7 @@ from datetime import date
 
 from sqlalchemy import create_engine, insert
 
-from db.travel_models import airports, flight_offers, flights, metadata
+from travel_assistant.db.travel_models import airports, flight_offers, flights, metadata
 from scripts.import_network_data import FIXTURE, prepare_snapshot
 from services.recommendations import reachable_cities
 

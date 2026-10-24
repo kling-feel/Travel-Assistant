@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from api.travel import router
-from config import settings
-from db.travel_models import (airports, chat_sessions, flight_offers, flight_orders,
+from travel_assistant.core.config import settings
+from travel_assistant.db.travel_models import (airports, chat_sessions, flight_offers, flight_orders,
                               flights, hotel_orders, hotel_products, hotels,
                               metadata, pending_actions, rental_products, travelers)
 from migrations import (v001_travel, v002_sessions, v003_actions,
@@ -19,8 +19,8 @@ from migrations import (v001_travel, v002_sessions, v003_actions,
                         v010_hotel_refunds, v011_rental_changes)
 from services.actions import ActionError, create_proposal, get_proposal
 from services.demo_pricing import cancellation_fee
-from utils.dependencies import get_db
-from utils.password_hash import get_hashed_password
+from travel_assistant.core.dependencies import get_db
+from travel_assistant.core.password_hash import get_hashed_password
 
 
 class ActionFixture(unittest.TestCase):

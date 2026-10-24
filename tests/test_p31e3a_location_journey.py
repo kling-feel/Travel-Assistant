@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from sqlalchemy import insert, select, update
 
-from db.travel_models import (airports, flight_offers, flight_orders, flights,
+from travel_assistant.db.travel_models import (airports, flight_offers, flight_orders, flights,
                               hotel_orders, hotels, pending_actions)
 from services.recommendations import ReviewedCatalogProvider
 from tests import test_p26a_dialogue as dialogue_cases

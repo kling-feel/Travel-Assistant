@@ -1,5 +1,5 @@
 from logging.config import dictConfig
-from config import settings
+from travel_assistant.core.config import settings
 
 
 def init_log():

@@ -1,7 +1,7 @@
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from db import sm
+from travel_assistant.db import sm
 
 
 def get_db(request: Request) -> Session:

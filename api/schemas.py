@@ -2,7 +2,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from db import DBModelBase
+from travel_assistant.db import DBModelBase
 
 # 先定义三种泛型, 以便于在数据库操作的时候更加方便。
 ModelType = TypeVar('ModelType', bound=DBModelBase)

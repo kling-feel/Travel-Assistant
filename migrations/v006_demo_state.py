@@ -1,6 +1,6 @@
 """Persist the demonstration date used for the current network snapshot."""
 
-from db.travel_models import demo_state, metadata
+from travel_assistant.db.travel_models import demo_state, metadata
 
 VERSION = "006_demo_state"
 

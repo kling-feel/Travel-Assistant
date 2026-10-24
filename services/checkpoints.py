@@ -6,7 +6,7 @@ os.environ["LANGGRAPH_STRICT_MSGPACK"] = "true"
 
 from langgraph.checkpoint.postgres import PostgresSaver  # noqa: E402
 
-from db import engine
+from travel_assistant.db import engine
 
 
 def _connection_string():

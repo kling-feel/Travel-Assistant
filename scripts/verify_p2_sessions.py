@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from db import engine
-from db.travel_models import chat_messages, chat_sessions, flight_orders, hotel_orders
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import chat_messages, chat_sessions, flight_orders, hotel_orders
 from main import Server
 
 

@@ -13,8 +13,8 @@ from sqlalchemy import delete, func, select
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from db import engine
-from db.travel_models import (action_results, audit_events, chat_messages,
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import (action_results, audit_events, chat_messages,
                               chat_sessions, chat_turns, flight_orders,
                               hotel_orders, pending_actions, rental_orders,
                               travelers)

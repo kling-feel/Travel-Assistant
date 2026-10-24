@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from sqlalchemy import select, update
 
-from db.travel_models import audit_events, flight_orders, pending_actions
+from travel_assistant.db.travel_models import audit_events, flight_orders, pending_actions
 from graph_chat.controlled import _fresh_flight_candidates
 from services.dialogue_context import read_request
 from services.model_config import ModelUnavailable

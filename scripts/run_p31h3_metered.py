@@ -13,7 +13,7 @@ import uvicorn
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from config import settings
+from travel_assistant.core.config import settings
 from main import Server
 from services.answer_composer import compose_verified_answer
 from services.model_config import get_chat_model

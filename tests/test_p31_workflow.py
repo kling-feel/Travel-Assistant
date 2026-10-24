@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from fastapi.testclient import TestClient
 
-from config import settings
+from travel_assistant.core.config import settings
 from tests.p31_preview_server import preview_app
 
 

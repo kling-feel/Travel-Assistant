@@ -19,15 +19,15 @@ from sqlalchemy import delete, func, insert, select
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from db import engine
-from db.travel_models import (action_results, audit_events, chat_messages,
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import (action_results, audit_events, chat_messages,
                               chat_sessions, chat_turns, flight_orders,
                               hotel_orders, pending_actions, rental_orders,
                               travelers)
 from main import Server
 from scripts.verify_p25_all_actions import _inputs
 from services.checkpoints import open_checkpointer
-from utils.password_hash import get_hashed_password
+from travel_assistant.core.password_hash import get_hashed_password
 
 STATE = ROOT / "data/generated/p26b-verifier-state.json"
 TABLES = (travelers, flight_orders, hotel_orders, rental_orders,

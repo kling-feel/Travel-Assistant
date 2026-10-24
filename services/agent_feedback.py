@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from db.travel_models import airports, flight_orders, flights, hotel_orders
+from travel_assistant.db.travel_models import airports, flight_orders, flights, hotel_orders
 from services.actions import _hotel_today
 from services.dialogue_context import mentioned_cities
 from services.location_labels import city_zh

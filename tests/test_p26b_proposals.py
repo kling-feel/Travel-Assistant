@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import create_engine, insert, inspect, text
 from sqlalchemy.orm import Session
 
-from db.travel_models import (flight_orders, hotel_orders, metadata,
+from travel_assistant.db.travel_models import (flight_orders, hotel_orders, metadata,
                               rental_orders, travelers)
 from services.agent_proposals import SelectionNeeded, _ordinal, _product_choice, prepare_actions
 from migrations import v013_turn_action_cards

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
-from db.travel_models import (action_results, audit_events, chat_sessions, flight_offers,
+from travel_assistant.db.travel_models import (action_results, audit_events, chat_sessions, flight_offers,
                               flight_orders, hotel_orders, hotel_products, hotels,
                               pending_actions,
                               policy_documents)

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import insert, select, update
 
-from db.travel_models import (action_results, audit_events, flight_offers,
+from travel_assistant.db.travel_models import (action_results, audit_events, flight_offers,
                               flight_orders, flights, hotel_orders,
                               hotel_products, pending_actions, policy_documents,
                               rental_orders, rental_products,

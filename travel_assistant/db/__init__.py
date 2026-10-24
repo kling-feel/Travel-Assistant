@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import URL, create_engine, DateTime, func
 from sqlalchemy.orm import sessionmaker, scoped_session, DeclarativeBase, declared_attr, Mapped, mapped_column
 
-from config import settings
+from travel_assistant.core.config import settings
 
 if settings.DATABASE_URL:
     url = settings.DATABASE_URL

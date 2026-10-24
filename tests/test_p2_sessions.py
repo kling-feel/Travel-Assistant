@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from api.travel import router
-from config import settings
-from db.travel_models import chat_messages, chat_sessions, travelers
+from travel_assistant.core.config import settings
+from travel_assistant.db.travel_models import chat_messages, chat_sessions, travelers
 from migrations import v001_travel, v002_sessions
 from services.sessions import append_message, get_session_history
-from utils.dependencies import get_db
-from utils.password_hash import get_hashed_password
+from travel_assistant.core.dependencies import get_db
+from travel_assistant.core.password_hash import get_hashed_password
 
 
 class SessionTests(unittest.TestCase):

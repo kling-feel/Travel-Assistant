@@ -10,8 +10,8 @@ from urllib.parse import urlsplit
 import httpx
 from sqlalchemy import select
 
-from config import settings
-from db.travel_models import (airports, demo_state, flight_offers, flight_orders,
+from travel_assistant.core.config import settings
+from travel_assistant.db.travel_models import (airports, demo_state, flight_offers, flight_orders,
                               flights, hotel_orders, hotel_products, hotels)
 from services.recommendation_geography import (airport_geography,
                                                country_for_fixture_city,

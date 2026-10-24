@@ -16,8 +16,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, insert, select, update
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from db import engine
-from db.travel_models import (action_results, audit_events, chat_sessions,
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import (action_results, audit_events, chat_sessions,
                               demo_state, flight_offers, flight_orders, flights,
                               hotel_orders, hotel_products, pending_actions,
                               rental_orders, rental_products, travelers,
@@ -26,7 +26,7 @@ from main import Server
 from services.actions import create_proposal
 from services.demo_pricing import cancellation_fee
 from services.policy_catalog import HOTEL_POLICY_V3
-from utils.password_hash import get_hashed_password
+from travel_assistant.core.password_hash import get_hashed_password
 
 
 STATE = Path(__file__).resolve().parents[1] / "data/generated/p25c-verifier-state.json"

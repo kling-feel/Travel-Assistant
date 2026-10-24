@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from sqlalchemy import insert, select, update
 
-from db.travel_models import (airports, flight_offers, flights, hotel_orders, hotel_products, hotels,
+from travel_assistant.db.travel_models import (airports, flight_offers, flights, hotel_orders, hotel_products, hotels,
                               pending_actions, policy_documents, rental_orders,
                               rental_products)
 from services.dialogue_context import read_request, rental_clocks

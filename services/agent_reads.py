@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from db.travel_models import airports, chat_turns, demo_state, flight_offers, flights, hotel_products, hotels
+from travel_assistant.db.travel_models import airports, chat_turns, demo_state, flight_offers, flights, hotel_products, hotels
 from services.actions import ActionNotFound, _hotel_today, get_proposal
 from services.country_flights import find_country_flights
 from services.location_labels import airport_zh, amount_zh, city_zh, product_zh, room_zh

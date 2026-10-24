@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
-from db.travel_models import airports, flight_offers, flights
+from travel_assistant.db.travel_models import airports, flight_offers, flights
 from scripts.verify_network_fixture import reachable_cities
 from services.recommendation_geography import airport_geography
 from services.recommendations import (_CITY_ALIASES, RecommendationSearchError,

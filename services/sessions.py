@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import func, insert, select, update
 
-from db.travel_models import chat_messages, chat_sessions, chat_turns
+from travel_assistant.db.travel_models import chat_messages, chat_sessions, chat_turns
 
 
 class SessionNotFound(ValueError):

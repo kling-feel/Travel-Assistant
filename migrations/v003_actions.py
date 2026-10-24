@@ -2,7 +2,7 @@
 
 from sqlalchemy import insert, select
 
-from db.travel_models import (flight_offers, metadata, pending_actions,
+from travel_assistant.db.travel_models import (flight_offers, metadata, pending_actions,
                               policy_documents)
 from services.demo_pricing import (FLIGHT_POLICY, HOTEL_POLICY,
                                    seed_missing_flight_offers)

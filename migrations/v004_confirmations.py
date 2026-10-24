@@ -2,7 +2,7 @@
 
 from sqlalchemy import insert, select, text
 
-from db.travel_models import action_results, audit_events, metadata, pending_actions
+from travel_assistant.db.travel_models import action_results, audit_events, metadata, pending_actions
 
 VERSION = "004_confirmations"
 

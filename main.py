@@ -2,10 +2,10 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
-from config import settings
-from utils import handler_error, cors
+from travel_assistant.core.config import settings
+from travel_assistant.core import handler_error, cors
 
-from config.log_config import init_log
+from travel_assistant.core.log_config import init_log
 from api import routers
 from travel_assistant.paths import STATIC_DIR
 

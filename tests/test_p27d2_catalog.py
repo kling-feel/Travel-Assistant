@@ -9,7 +9,7 @@ from unittest.mock import patch
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
-from db.travel_models import airports, flight_offers, flights
+from travel_assistant.db.travel_models import airports, flight_offers, flights
 from services.recommendation_geography import airport_geography
 from services.recommendations import ReviewedCatalogProvider, read_recommendation
 from services.reviewed_places import places_for_city, reviewed_places

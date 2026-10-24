@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import insert, select, update
 
 from api.travel import _card_brief
-from db.travel_models import (airports, flight_orders, flights, hotel_orders,
+from travel_assistant.db.travel_models import (airports, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, policy_documents,
                               rental_orders, rental_products)
 from services.agent_reads import read_for_assistant

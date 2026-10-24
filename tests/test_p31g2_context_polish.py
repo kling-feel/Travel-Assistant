@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from sqlalchemy import insert, select
 
-from db.travel_models import flight_orders, flights, pending_actions
+from travel_assistant.db.travel_models import flight_orders, flights, pending_actions
 from services.agent_reads import read_for_assistant
 from tests.test_p26a_dialogue import ScriptedModel
 from tests import test_p31e3a_location_journey as location_cases

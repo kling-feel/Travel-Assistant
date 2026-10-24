@@ -2,7 +2,7 @@
 
 from sqlalchemy import insert, inspect, select, text
 
-from db.travel_models import metadata, policy_documents, rental_products
+from travel_assistant.db.travel_models import metadata, policy_documents, rental_products
 from services.policy_catalog import ALL_POLICIES
 
 VERSION = "007_city_products"

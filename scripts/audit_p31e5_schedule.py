@@ -12,9 +12,9 @@ from sqlalchemy import select
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from config import settings
-from db import engine
-from db.travel_models import demo_state, flight_offers, flights, hotel_products, hotels
+from travel_assistant.core.config import settings
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import demo_state, flight_offers, flights, hotel_products, hotels
 from scripts.import_network_data import FIXTURE, prepare_snapshot
 from services.flight_schedule import FLIGHT_SCHEDULE_RULE, great_circle_km
 

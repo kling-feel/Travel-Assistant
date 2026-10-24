@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import insert, select, update
 
-from db.travel_models import airports, demo_state, rental_orders, rental_products
+from travel_assistant.db.travel_models import airports, demo_state, rental_orders, rental_products
 from services.travel import OrderError
 
 

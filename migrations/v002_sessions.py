@@ -1,6 +1,6 @@
 """Server-owned sessions and ordered, durable conversation messages."""
 
-from db.travel_models import metadata, chat_sessions, chat_messages
+from travel_assistant.db.travel_models import metadata, chat_sessions, chat_messages
 
 VERSION = "002_sessions"
 

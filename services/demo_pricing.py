@@ -5,7 +5,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import insert, select
 
-from db.travel_models import flight_offers, flights
+from travel_assistant.db.travel_models import flight_offers, flights
 # v003 imports this historical name; current hotel transactions use policy_catalog.HOTEL_POLICY.
 from services.policy_catalog import FLIGHT_POLICY, HOTEL_POLICY_V3 as HOTEL_POLICY
 

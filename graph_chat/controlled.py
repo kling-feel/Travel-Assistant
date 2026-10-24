@@ -18,7 +18,7 @@ from services.dialogue_context import (declared_current_city, flight_followup, l
                                        stay_nights)
 from services.location_labels import city_zh
 from services.recommendation_geography import country_for_fixture_city
-from config import settings
+from travel_assistant.core.config import settings
 
 
 INTENTS = ("general", "itinerary", "policy", "flight_search", "country_flight_search",

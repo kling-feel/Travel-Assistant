@@ -8,7 +8,7 @@ import httpx
 from sqlalchemy import insert, update
 from sqlalchemy.orm import Session
 
-from db.travel_models import (airports, flight_offers, flight_orders, flights,
+from travel_assistant.db.travel_models import (airports, flight_offers, flight_orders, flights,
                               hotel_products, hotels)
 from services.dialogue_context import mentioned_cities, mentioned_dates, read_request
 from services.agent_reads import read_for_assistant

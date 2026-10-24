@@ -2,7 +2,7 @@
 
 from langchain_openai import ChatOpenAI
 
-from config import settings
+from travel_assistant.core.config import settings
 from services.answer_composer import ComposingModel
 
 

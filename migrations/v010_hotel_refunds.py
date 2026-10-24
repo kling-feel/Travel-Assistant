@@ -2,7 +2,7 @@
 
 from sqlalchemy import insert, select
 
-from db.travel_models import policy_documents
+from travel_assistant.db.travel_models import policy_documents
 from services.policy_catalog import HOTEL_POLICY
 
 VERSION = "010_hotel_refunds"

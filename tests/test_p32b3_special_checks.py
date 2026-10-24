@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from sqlalchemy import select
 
-from db.travel_models import chat_messages, flight_orders, hotel_orders, pending_actions, rental_orders
+from travel_assistant.db.travel_models import chat_messages, flight_orders, hotel_orders, pending_actions, rental_orders
 from services.weather_search import WeatherSearchError
 from tests import test_p26a_dialogue as dialogue_cases
 

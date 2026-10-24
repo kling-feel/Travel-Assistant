@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from sqlalchemy import select
 
-from db.travel_models import airports, flight_offers, flights
+from travel_assistant.db.travel_models import airports, flight_offers, flights
 from travel_assistant.paths import FIXTURES_DIR
 
 

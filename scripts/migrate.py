@@ -6,7 +6,7 @@ import sys
 from sqlalchemy import text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from db import engine
+from travel_assistant.db import engine
 from migrations import (v001_travel, v002_sessions, v003_actions,
                         v004_confirmations, v005_network, v006_demo_state,
                         v007_city_products, v008_flight_booking,

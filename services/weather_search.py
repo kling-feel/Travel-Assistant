@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from config import settings
+from travel_assistant.core.config import settings
 from services.location_labels import city_zh
 from services.recommendation_geography import country_for_fixture_city
 

@@ -16,8 +16,8 @@ from sqlalchemy import delete
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from db import engine
-from db.travel_models import chat_messages, chat_sessions, chat_turns
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import chat_messages, chat_sessions, chat_turns
 from scripts.verify_p26a_dialogue import FixedModel, _app, _auth, _counts
 from services.checkpoints import open_checkpointer
 

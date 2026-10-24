@@ -20,9 +20,9 @@ from sqlalchemy import func, select
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from config import settings
-from db import engine
-from db.travel_models import (action_results, audit_events, chat_sessions,
+from travel_assistant.core.config import settings
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import (action_results, audit_events, chat_sessions,
                               airports, demo_state, flight_orders, flights, hotel_orders,
                               pending_actions, rental_orders)
 from main import Server

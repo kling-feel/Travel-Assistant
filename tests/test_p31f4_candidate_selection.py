@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import insert, select, update
 
-from db.travel_models import (demo_state, flight_offers, flight_orders, flights,
+from travel_assistant.db.travel_models import (demo_state, flight_offers, flight_orders, flights,
                               hotel_orders, hotel_products, metadata, pending_actions,
                               rental_orders, rental_products)
 from tests.test_p2_actions import ActionFixture

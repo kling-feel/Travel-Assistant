@@ -19,8 +19,8 @@ from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from db import engine
-from db.travel_models import (action_results, audit_events, airports,
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import (action_results, audit_events, airports,
                               chat_sessions, demo_state, flight_orders,
                               hotel_orders, pending_actions, policy_documents,
                               rental_orders, rental_products, travelers)
@@ -28,7 +28,7 @@ from main import Server
 from services.actions import ActionError, create_proposal
 from services.confirmations import confirm_action, reject_action
 from services.policy_catalog import RENTAL_POLICY
-from utils.password_hash import get_hashed_password
+from travel_assistant.core.password_hash import get_hashed_password
 
 STATE = Path(__file__).resolve().parents[1] / "data/generated/p25d1-verifier-state.json"
 

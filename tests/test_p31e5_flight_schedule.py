@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import create_engine, insert
 
-from db.travel_models import (airports as airport_table, demo_state,
+from travel_assistant.db.travel_models import (airports as airport_table, demo_state,
                               hotel_products, hotels, metadata)
 from scripts.import_network_data import FIXTURE, prepare_snapshot
 from services.city_products import (GENERATION_RULE, HOTEL_LAST_CHECKOUT_OFFSET,

@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from sqlalchemy import select
 
-from db.travel_models import (chat_turns, flight_offers, flight_orders, hotel_orders,
+from travel_assistant.db.travel_models import (chat_turns, flight_offers, flight_orders, hotel_orders,
                               hotel_products, rental_orders, rental_products)
 from services.actions import FIELDS
 from services.dialogue_context import mentioned_cities, mentioned_dates

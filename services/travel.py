@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, func, insert, or_, select, update
 
-from db.travel_models import (airports, demo_state, flight_offers, flight_orders, flights, hotel_orders,
+from travel_assistant.db.travel_models import (airports, demo_state, flight_offers, flight_orders, flights, hotel_orders,
                               hotel_products, hotels, policy_documents, rental_orders,
                               rental_products)
 from services.city_products import HOTEL_LAST_CHECKOUT_OFFSET

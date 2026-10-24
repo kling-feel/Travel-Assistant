@@ -2,7 +2,7 @@
 
 import re
 
-from db.travel_models import airports
+from travel_assistant.db.travel_models import airports
 from services.dialogue_context import mentioned_cities
 from services.location_labels import city_zh, product_zh
 from services.travel import itinerary

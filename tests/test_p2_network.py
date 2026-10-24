@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, insert, inspect
 
-from db.travel_models import airports, demo_state, flight_offers, flights, metadata
+from travel_assistant.db.travel_models import airports, demo_state, flight_offers, flights, metadata
 from migrations import v005_network, v006_demo_state
 from scripts.import_network_data import FIXTURE, prepare_snapshot
 from services.actions import _offer

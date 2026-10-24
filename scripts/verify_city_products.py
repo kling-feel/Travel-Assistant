@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from db import engine
-from db.travel_models import (airports, demo_state, hotel_orders, hotel_products,
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import (airports, demo_state, hotel_orders, hotel_products,
                               hotels, pending_actions, rental_products)
 from main import Server
 from services.policy_catalog import CURRENT_POLICIES

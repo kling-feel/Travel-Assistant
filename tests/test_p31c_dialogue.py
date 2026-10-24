@@ -7,7 +7,7 @@ from unittest.mock import patch
 from sqlalchemy import insert, select, update
 from sqlalchemy.orm import Session
 
-from db.travel_models import (airports, flight_offers, flight_orders, flights,
+from travel_assistant.db.travel_models import (airports, flight_offers, flight_orders, flights,
                               hotel_orders, hotel_products, hotels, pending_actions)
 from services.agent_feedback import cancellation_overview, explain_action_error
 from services.agent_reads import read_for_assistant

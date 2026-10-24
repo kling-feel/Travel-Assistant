@@ -19,8 +19,8 @@ from sqlalchemy import delete, func, insert, select, text
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from db import engine
-from db.travel_models import (action_results, airports, audit_events, chat_messages,
+from travel_assistant.db import engine
+from travel_assistant.db.travel_models import (action_results, airports, audit_events, chat_messages,
                               chat_turns,
                               chat_sessions, demo_state, flight_offers, flight_orders, flights,
                               hotel_orders, hotel_products, hotels, rental_orders,
@@ -33,7 +33,7 @@ from services.demo_pricing import (NETWORK_OFFER_RULE_ID, OFFER_VERSION,
 from services.flight_schedule import (FLIGHT_SCHEDULE_RULE, fictional_duration,
                                       great_circle_km)
 from services.policy_catalog import SEED_POLICIES
-from utils.password_hash import get_hashed_password
+from travel_assistant.core.password_hash import get_hashed_password
 
 
 FIXTURE = ROOT / "data" / "fixtures" / "network_source.sqlite"

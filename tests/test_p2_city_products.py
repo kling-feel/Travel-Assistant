@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, insert, inspect, select, update
 
-from db.travel_models import (airports, demo_state, hotel_products, hotels, metadata,
+from travel_assistant.db.travel_models import (airports, demo_state, hotel_products, hotels, metadata,
                               policy_documents, rental_products)
 from migrations import v007_city_products
 from scripts.import_network_data import FIXTURE, prepare_snapshot

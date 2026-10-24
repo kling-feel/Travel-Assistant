@@ -17,15 +17,15 @@ from sqlalchemy import create_engine, insert
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from config import settings
-from db.travel_models import (airports, demo_state, flight_offers, flight_orders,
+from travel_assistant.core.config import settings
+from travel_assistant.db.travel_models import (airports, demo_state, flight_offers, flight_orders,
                               flights, hotel_products, hotels, metadata,
                               policy_documents, rental_products, travelers)
 from main import Server
 from services.model_config import ModelUnavailable
 from services.policy_catalog import CURRENT_POLICIES
-from utils.dependencies import get_db
-from utils.password_hash import get_hashed_password
+from travel_assistant.core.dependencies import get_db
+from travel_assistant.core.password_hash import get_hashed_password
 
 
 class FixedModel:

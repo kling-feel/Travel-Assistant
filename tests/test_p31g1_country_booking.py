@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from sqlalchemy import insert, select, update
 
-from db.travel_models import airports, flight_offers, flight_orders, flights, pending_actions
+from travel_assistant.db.travel_models import airports, flight_offers, flight_orders, flights, pending_actions
 from tests.test_p26a_dialogue import ScriptedModel
 from tests import test_p31e2a_earliest as earliest_cases
 from services.travel import find_earliest_flights

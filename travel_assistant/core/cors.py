@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from config import settings
+from travel_assistant.core.config import settings
 
 
 def init_cors(app: FastAPI) -> None:
