@@ -11,6 +11,7 @@ from unittest.mock import patch
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
+from travel_assistant.paths import FIXTURES_DIR
 from travel_assistant.db.travel_models import airports, flight_offers, flights
 from travel_assistant.services.recommendations import ReviewedCatalogProvider, read_recommendation
 from travel_assistant.services.reviewed_places import places_for_city, reviewed_places
@@ -33,7 +34,7 @@ class PlaceDisplayTests(unittest.TestCase):
         self.assertEqual(places_for_city("Shanghai", "CN", "nature"), [])
 
     def test_tampered_display_fails_closed(self):
-        source = Path(__file__).resolve().parents[1] / "data/fixtures/reviewed_place_display_v1.psv"
+        source = FIXTURES_DIR / "reviewed_place_display_v1.psv"
         content = source.read_text(encoding="utf-8")
         with TemporaryDirectory() as directory:
             tampered = Path(directory) / "tampered.psv"
@@ -48,7 +49,7 @@ class PlaceDisplayTests(unittest.TestCase):
                 reviewed_places.cache_clear()
 
     def test_answer_and_reference_share_place_id(self):
-        from tests.test_p26a_dialogue import DialogueTests
+        from tests.dialogue.test_p26a_dialogue import DialogueTests
 
         fixture = DialogueTests("runTest")
         fixture.setUp()

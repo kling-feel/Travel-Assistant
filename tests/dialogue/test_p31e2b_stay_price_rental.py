@@ -14,7 +14,7 @@ from travel_assistant.services.agent_proposals import SelectionNeeded, prepare_a
 from travel_assistant.services.policy_catalog import CURRENT_POLICIES
 from travel_assistant.services.travel import find_hotels, find_rentals
 from travel_assistant.agents.controlled import _fresh_offer_candidates
-from tests import test_p26a_dialogue as dialogue_cases
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
 
 
 class _FixedActionClock(datetime):

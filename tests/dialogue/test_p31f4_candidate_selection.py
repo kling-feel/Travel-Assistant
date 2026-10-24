@@ -9,8 +9,8 @@ from sqlalchemy import insert, select, update
 from travel_assistant.db.travel_models import (demo_state, flight_offers, flight_orders, flights,
                               hotel_orders, hotel_products, metadata, pending_actions,
                               rental_orders, rental_products)
-from tests.test_p2_actions import ActionFixture
-from tests import test_p26a_dialogue as dialogue_cases
+from tests.business.test_p2_actions import ActionFixture
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
 
 
 class CandidateFlightTests(unittest.TestCase):

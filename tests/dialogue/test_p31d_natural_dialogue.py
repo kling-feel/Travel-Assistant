@@ -14,7 +14,7 @@ from travel_assistant.services.dialogue_context import mentioned_cities, mention
 from travel_assistant.services.agent_reads import read_for_assistant
 from travel_assistant.services.recommendations import read_recommendation, ReviewedCatalogProvider
 from travel_assistant.services.weather_search import search_weather
-from tests import test_p26a_dialogue as dialogue_cases
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
 
 
 class NaturalDialogueTests(unittest.TestCase):

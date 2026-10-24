@@ -4,6 +4,15 @@
 
 脚本文件仍在本目录，调用方式不变；它们使用 `travel_assistant/core/` 中的配置和身份工具、`travel_assistant/db/` 中的数据库模型，以及 `travel_assistant/services/` 中的业务服务；现行旅客接口和受控助手分别位于 `travel_assistant/api/`、`travel_assistant/agents/`。迁移版本仍保留在根目录 `migrations/`。
 
+## 先选对入口
+
+| 需求 | 从哪里开始 | 边界 |
+| --- | --- | --- |
+| 启动或演示项目 | [项目说明](../README.md) | 日常启动不重建数据库 |
+| 检查交付样本与代码 | 下方“当前常用入口”及[自动化测试](../tests/README.md) | 可选择纯离线核验 |
+| 升级或重置数据库 | 下方 `migrate.py`、`import_network_data.py` | 先核对目标库和备份；会写数据 |
+| 历史旅程或真实模型验收 | 下方“数据库专项核验”“隔离环境专项入口” | 可能写测试记录或产生费用，按独立计划执行 |
+
 ## 当前常用入口
 
 | 脚本 | 作用 | 读写与前置条件 |

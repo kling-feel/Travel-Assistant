@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from travel_assistant.db.travel_models import chat_messages, flight_orders, hotel_orders, pending_actions, rental_orders
 from travel_assistant.services.weather_search import WeatherSearchError
-from tests import test_p26a_dialogue as dialogue_cases
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
 
 
 class SpecialChecksTests(unittest.TestCase):

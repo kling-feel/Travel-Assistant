@@ -17,7 +17,7 @@ from travel_assistant.services.reviewed_places import places_for_city, reviewed_
 
 class AllCityRecommendationTests(unittest.TestCase):
     def test_every_city_has_two_grounded_english_and_chinese_answers(self):
-        from tests.test_p26a_dialogue import DialogueTests
+        from tests.dialogue.test_p26a_dialogue import DialogueTests
 
         fixture = DialogueTests("runTest")
         fixture.setUp()

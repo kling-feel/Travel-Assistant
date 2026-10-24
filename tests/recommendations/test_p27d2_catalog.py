@@ -9,6 +9,7 @@ from unittest.mock import patch
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
+from travel_assistant.paths import FIXTURES_DIR
 from travel_assistant.db.travel_models import airports, flight_offers, flights
 from travel_assistant.services.recommendation_geography import airport_geography
 from travel_assistant.services.recommendations import ReviewedCatalogProvider, read_recommendation
@@ -17,7 +18,7 @@ from travel_assistant.services.reviewed_places import places_for_city, reviewed_
 
 class FullCatalogTests(unittest.TestCase):
     def test_previous_version_is_unchanged_and_unreachable_city_is_excluded(self):
-        root = Path(__file__).resolve().parents[1] / "data/fixtures"
+        root = FIXTURES_DIR
         old = (root / "reviewed_places_v1.psv").read_text(encoding="utf-8").splitlines()
         current = (root / "reviewed_places_v2.psv").read_text(encoding="utf-8").splitlines()
         self.assertEqual(current[:len(old)], old)
@@ -37,7 +38,7 @@ class FullCatalogTests(unittest.TestCase):
         reviewed_places.cache_clear()
 
     def test_recommendations_for_risk_cities_use_matching_country_and_no_cards(self):
-        from tests.test_p26a_dialogue import DialogueTests
+        from tests.dialogue.test_p26a_dialogue import DialogueTests
 
         fixture = DialogueTests("runTest")
         fixture.setUp()

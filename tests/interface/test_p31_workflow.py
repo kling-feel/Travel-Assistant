@@ -6,7 +6,7 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 
 from travel_assistant.core.config import settings
-from tests.p31_preview_server import preview_app
+from tests.support.p31_preview_server import preview_app
 
 
 class PageWorkflowTests(unittest.TestCase):

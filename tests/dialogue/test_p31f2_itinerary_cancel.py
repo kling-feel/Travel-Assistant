@@ -14,7 +14,7 @@ from travel_assistant.services.agent_feedback import bulk_cancellation_requested
 from travel_assistant.services.order_targeting import matching_orders
 from travel_assistant.services.policy_catalog import CURRENT_POLICIES
 from travel_assistant.services.location_labels import airport_zh
-from tests import test_p26a_dialogue as cases
+from tests.dialogue import test_p26a_dialogue as cases
 
 
 class ItineraryCancelTests(unittest.TestCase):

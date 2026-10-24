@@ -2,14 +2,14 @@
 
 import sqlite3
 import unittest
-from pathlib import Path
 
+from travel_assistant.paths import FIXTURES_DIR
 from travel_assistant.services.location_labels import airport_zh, city_zh, product_zh
 
 
 class LocationLabelTests(unittest.TestCase):
     def test_all_shipped_airports_have_chinese_labels(self):
-        source = Path(__file__).resolve().parent.parent / "data/fixtures/network_source.sqlite"
+        source = FIXTURES_DIR / "network_source.sqlite"
         with sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True) as db:
             rows = db.execute("SELECT airport_code, city FROM airports_data").fetchall()
         self.assertEqual(len(rows), 115)

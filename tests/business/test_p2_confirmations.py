@@ -15,7 +15,7 @@ from migrations import v004_confirmations
 from travel_assistant.services.actions import create_proposal
 from travel_assistant.services.confirmations import confirm_action
 from travel_assistant.services.policy_catalog import HOTEL_POLICY, HOTEL_POLICY_V3, LEGACY_POLICIES
-from test_p2_actions import ActionFixture
+from tests.business.test_p2_actions import ActionFixture
 
 
 class ConfirmationTests(ActionFixture):

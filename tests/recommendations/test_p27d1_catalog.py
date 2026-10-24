@@ -7,6 +7,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from travel_assistant.paths import FIXTURES_DIR
+
 from travel_assistant.services.recommendation_geography import country_for_fixture_city
 from travel_assistant.services.reviewed_places import places_for_city, reviewed_places
 from travel_assistant.services.recommendations import _CITY_ALIASES, _explicit_city
@@ -48,7 +50,7 @@ class ReviewedPlacesTests(unittest.TestCase):
         self.assertEqual(len(reviewed_places()), 190)
 
     def test_official_label_cannot_be_spoofed_by_an_unlisted_host(self):
-        source = Path(__file__).resolve().parents[1] / "data/fixtures/reviewed_places_v2.psv"
+        source = FIXTURES_DIR / "reviewed_places_v2.psv"
         original = source.read_text(encoding="utf-8")
         forged = original.replace(
             "https://www.basel.com/en/attractions/basler-muenster-bc9d869a33",

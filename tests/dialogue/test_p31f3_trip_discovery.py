@@ -11,7 +11,7 @@ from travel_assistant.db.travel_models import airports, demo_state, flight_offer
 from travel_assistant.services.dialogue_context import local_today
 from travel_assistant.services.recommendations import ReviewedCatalogProvider
 from travel_assistant.services.trip_discovery import discover_destinations
-from tests import test_p26a_dialogue as cases
+from tests.dialogue import test_p26a_dialogue as cases
 
 
 class TripDiscoveryTests(unittest.TestCase):

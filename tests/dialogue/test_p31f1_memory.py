@@ -11,8 +11,8 @@ from travel_assistant.agents.controlled import _fresh_flight_candidates
 from travel_assistant.services.dialogue_context import read_request
 from travel_assistant.services.model_config import ModelUnavailable
 from travel_assistant.services.travel import find_earliest_flights
-from tests.test_p26a_dialogue import ScriptedModel
-from tests.test_p31e2a_earliest import EarliestJourneyTests, NOW
+from tests.dialogue.test_p26a_dialogue import ScriptedModel
+from tests.dialogue.test_p31e2a_earliest import EarliestJourneyTests, NOW
 
 
 class WorkMemoryTests(unittest.TestCase):

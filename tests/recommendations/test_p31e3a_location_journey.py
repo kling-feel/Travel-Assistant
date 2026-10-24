@@ -9,8 +9,8 @@ from sqlalchemy import insert, select, update
 from travel_assistant.db.travel_models import (airports, flight_offers, flight_orders, flights,
                               hotel_orders, hotels, pending_actions)
 from travel_assistant.services.recommendations import ReviewedCatalogProvider
-from tests import test_p26a_dialogue as dialogue_cases
-from tests import test_p31e1_transaction_journey as earlier
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
+from tests.dialogue import test_p31e1_transaction_journey as earlier
 
 
 class LocationJourneyTests(unittest.TestCase):

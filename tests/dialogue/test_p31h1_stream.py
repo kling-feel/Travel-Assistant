@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from travel_assistant.db.travel_models import chat_messages, chat_turns, flight_orders, hotel_orders, pending_actions
 from travel_assistant.services.chat_turns import begin_turn
-from tests import test_p26a_dialogue as dialogue_cases
-from tests import test_p31f2_itinerary_cancel as itinerary_cases
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
+from tests.dialogue import test_p31f2_itinerary_cancel as itinerary_cases
 
 
 def events(response):

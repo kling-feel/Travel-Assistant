@@ -10,8 +10,8 @@ from sqlalchemy import select
 
 from travel_assistant.db.travel_models import flight_orders, pending_actions
 from travel_assistant.services.answer_composer import compose_verified_answer
-from tests import test_p26a_dialogue as dialogue_cases
-from tests import test_p31e1_transaction_journey as journey_cases
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
+from tests.dialogue import test_p31e1_transaction_journey as journey_cases
 
 
 class PlanModel:

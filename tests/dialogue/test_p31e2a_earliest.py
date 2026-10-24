@@ -11,8 +11,8 @@ from travel_assistant.db.travel_models import (airports, audit_events, flight_of
 from travel_assistant.services.actions import create_proposal
 from travel_assistant.services.dialogue_context import read_request, requested_actions
 from travel_assistant.services.travel import find_earliest_flights
-from tests import test_p26a_dialogue as dialogue_cases
-from tests import test_p31e1_transaction_journey as prior_cases
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
+from tests.dialogue import test_p31e1_transaction_journey as prior_cases
 
 
 NOW = datetime(2026, 10, 21, 4, tzinfo=timezone.utc)

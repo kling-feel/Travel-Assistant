@@ -12,7 +12,7 @@ from travel_assistant.db.travel_models import (airports, flight_offers, flight_o
 from travel_assistant.services.agent_feedback import cancellation_overview, explain_action_error
 from travel_assistant.services.agent_reads import read_for_assistant
 from travel_assistant.services.recommendations import ReviewedCatalogProvider
-from tests import test_p26a_dialogue as dialogue_cases
+from tests.dialogue import test_p26a_dialogue as dialogue_cases
 
 
 class RealConversationRegressions(unittest.TestCase):
