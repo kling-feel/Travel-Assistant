@@ -32,6 +32,7 @@ class PageTests(unittest.TestCase):
             self.assertEqual(client.get("/static/app.js").status_code, 200)
             self.assertEqual(client.get("/static/app.css").status_code, 200)
             self.assertEqual(client.get("/static/mark.svg").status_code, 200)
+            self.assertEqual(client.get("/static/missing-file.js").status_code, 404)
 
     def test_demo_window_requires_login_and_follows_database_date(self):
         engine = create_engine("sqlite+pysqlite:///:memory:",

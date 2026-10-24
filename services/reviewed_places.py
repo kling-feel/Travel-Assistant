@@ -7,12 +7,12 @@ import sqlite3
 from collections import Counter
 from datetime import date, timedelta
 from functools import lru_cache
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from services.recommendation_geography import country_for_fixture_city
+from travel_assistant.paths import FIXTURES_DIR
 
-_ROOT = Path(__file__).resolve().parent.parent / "data/fixtures"
+_ROOT = FIXTURES_DIR
 _SOURCE = _ROOT / "reviewed_places_v2.psv"
 _PREVIOUS_SOURCE = _ROOT / "reviewed_places_v1.psv"
 _DISPLAY_SOURCE = _ROOT / "reviewed_place_display_v1.psv"

@@ -1,13 +1,12 @@
 """Small environment-based configuration for local and future cloud runs."""
 
 import os
-from pathlib import Path
 
 from dotenv import load_dotenv
 
+from travel_assistant.paths import PROJECT_ROOT
 
-ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 class Settings:

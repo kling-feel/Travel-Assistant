@@ -2,14 +2,14 @@
 
 import json
 from functools import lru_cache
-from pathlib import Path
 
 from sqlalchemy import select
 
 from db.travel_models import airports, flight_offers, flights
+from travel_assistant.paths import FIXTURES_DIR
 
 
-_SOURCE = Path(__file__).resolve().parent.parent / "data/fixtures/recommendation_geography.json"
+_SOURCE = FIXTURES_DIR / "recommendation_geography.json"
 
 
 @lru_cache(maxsize=1)
