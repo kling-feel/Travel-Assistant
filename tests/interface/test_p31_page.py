@@ -2,8 +2,9 @@
 
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, insert, update
 from sqlalchemy.orm import Session
@@ -18,6 +19,20 @@ from travel_assistant.core.password_hash import get_hashed_password
 
 
 class PageTests(unittest.TestCase):
+    def test_readiness_requires_initialized_database(self):
+        with patch("main.engine.connect") as connect:
+            connect.return_value.__enter__.return_value.execute.return_value.scalar_one_or_none.return_value = date(2026, 10, 25)
+            self.assertEqual(Server.ready(), {"status": "ready"})
+            connect.return_value.__enter__.return_value.execute.return_value.scalar_one_or_none.return_value = None
+            with self.assertRaises(HTTPException) as uninitialized:
+                Server.ready()
+            self.assertEqual(uninitialized.exception.status_code, 503)
+            connect.side_effect = OSError("database down")
+            with self.assertRaises(HTTPException) as unavailable:
+                Server.ready()
+            self.assertEqual(unavailable.exception.status_code, 503)
+            self.assertNotIn("database down", unavailable.exception.detail)
+
     def test_page_is_same_origin_and_has_browser_guards(self):
         server = Server()
         server.init_app()

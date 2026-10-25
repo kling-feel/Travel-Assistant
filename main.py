@@ -1,13 +1,16 @@
 import uvicorn
+from fastapi import HTTPException
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
+from sqlalchemy import text
 from travel_assistant.core.config import settings
 from travel_assistant.core import handler_error, cors
 
 from travel_assistant.core.log_config import init_log
 from travel_assistant.api import routers
 from travel_assistant.paths import STATIC_DIR
+from travel_assistant.db import engine
 
 
 class Server:
@@ -16,8 +19,21 @@ class Server:
         init_log()  # 加载日志的配置
         self.app = FastAPI()
         self.app.add_api_route('/health', lambda: {'status': 'ok'}, methods=['GET'], include_in_schema=False)
+        self.app.add_api_route('/ready', self.ready, methods=['GET'], include_in_schema=False)
         self.app.add_api_route('/app', self.traveler_page, methods=['GET'], include_in_schema=False)
         self.app.mount('/static', StaticFiles(directory=STATIC_DIR), name='my_static')
+
+    @staticmethod
+    def ready():
+        try:
+            with engine.connect() as connection:
+                if connection.execute(text('SELECT as_of FROM demo_state LIMIT 1')).scalar_one_or_none() is None:
+                    raise HTTPException(503, 'database is not initialized')
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(503, 'database is unavailable')
+        return {'status': 'ready'}
 
     @staticmethod
     def traveler_page():

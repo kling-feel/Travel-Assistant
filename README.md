@@ -43,6 +43,49 @@ P3.1h1 之后，在“对话助手”按发送，旅客原文立即显示，助�
 
 按本节命令在前台启动时，结束演示先在运行 API 的终端按 `Ctrl+C`，再执行 `docker stop travel-date-next-db-1`。若页面由后台进程启动，先核对监听 8000 的进程确为本项目启动器，再停止该进程；不要仅凭端口号终止来源不明的服务。新旧批次及恢复演练的数据卷都保留。不要运行 `down -v`，它会删除数据卷。若本机普通终端能运行 Docker、但某个受限工作台显示找不到 `docker` 或连不上 WSL，先在新开的 PowerShell 运行 `docker --version`、`docker info` 核对 Docker Desktop 引擎；这类差异可能来自该工作台的权限或 PATH，不能据此判断数据库故障。
 
+## 独立容器部署验收（P3.4a）
+
+本节只使用 `travel-p34a` 独立项目，页面绑定本机 `127.0.0.1:8018`，数据库**不映射宿主机端口**。现有 8000→5436 演示入口、旧 5433 批次及其数据卷不会被这些命令替换。第一次运行须已安装并启动 Docker Desktop，且 8018 端口空闲；在项目根目录的普通 PowerShell **逐行**执行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\create_container_env.py --as-of 2026-10-25
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a build app init
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a up -d --wait db
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a --profile setup run --rm backup
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a --profile setup run --rm init
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a up -d --wait app
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a ps
+```
+
+第一行只创建 Git 忽略的独立密码文件，已有文件时拒绝覆盖。`backup` 为迁移前空库做 PostgreSQL 自定义格式备份；`init` 仅在空库和备份均经核对后执行 13 版迁移并导入虚构样本，写出批次摘要；普通 `up` 和容器重启不会执行这两步。**任何一行失败就停止，不在非空库上重跑 `init` 或 `pg_restore`。** 如需新的演示日期，按[演示批次流程](docs/enterprise/操作计划/P3.3-演示日期维护与部署分步路线.md)另建独立项目与卷，不修改此批次订单日期。
+
+成功后打开 `http://127.0.0.1:8018/app`。示例账号 `demo1`、`demo2` 的密码在本机 `data/generated/p34a-container.env`，不要发送到聊天或提交。容器验收默认关闭付费模型和联网检索；登录、查询、已保存的订单与确认卡仍可用。`/health` 表示 API 进程存活，`/ready` 才检查数据库已有演示批次。检查、停止与再启动：
+
+```powershell
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a ps
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a stop app db
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a up -d --wait app
+```
+
+写入验收订单后，如需做独立备份与恢复演练，先在本机 Git 忽略目录选择**尚不存在**的备份文件名；以下示例不得覆盖已有备份。备份目录检查通过后，把文件恢复到另一个**全新项目**的数据卷，比较两库的脱敏摘要。操作前先核对 `travel-p34a-restore` 项目尚无容器或卷；恢复库使用同一独立环境文件，仅用于本机核验：
+
+```powershell
+if (Test-Path -LiteralPath data/generated/p34a-after-actions.dump) { throw '备份文件已存在，请先停止并核对' }
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a exec -T db pg_dump -U travel_app -d travel_demo -Fc -f /tmp/p34a-after-actions.dump
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a exec -T db pg_restore -l /tmp/p34a-after-actions.dump
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a cp db:/tmp/p34a-after-actions.dump data/generated/p34a-after-actions.dump
+Get-FileHash data/generated/p34a-after-actions.dump -Algorithm SHA256
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a --profile setup run --rm init python scripts/inspect_container_batch.py
+$priorRestore = docker volume ls --filter label=com.docker.compose.project=travel-p34a-restore --format '{{.Name}}'
+if ($priorRestore) { throw '恢复演练项目已有数据卷，请先停止并核对' }
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a-restore up -d --wait db
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a-restore cp data/generated/p34a-after-actions.dump db:/tmp/p34a-after-actions.dump
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a-restore exec -T db pg_restore -U travel_app -d travel_demo --no-owner --no-privileges --exit-on-error /tmp/p34a-after-actions.dump
+docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a-restore --profile setup run --rm init python scripts/inspect_container_batch.py
+```
+
+两个摘要中的演示日期、迁移版本、各表计数、订单与供给摘要应一致。验收后用各自项目名执行 `stop app db` 或 `stop db`，保留所有卷和备份；**不要运行 `down -v`**。`restart: unless-stopped` 可处理部分容器退出和 Docker 引擎重启，不能覆盖 Docker Desktop 未启动、宿主机故障或数据损坏。镜像只包含程序、可信地点目录与脱敏虚构航线样本，原始 SQLite、`.env`、生成数据和备份均由 `.dockerignore` 排除。具体门槛和失败处理见[P3.4a 操作计划](docs/enterprise/操作计划/P3.4a-本机容器化与恢复验收.md)。
+
 ## 数据从哪里来
 
 默认使用 [完整航线样本](data/fixtures/network_source.sqlite)：它只含 115 个机场和 33,121 条虚构航班，其中 15,383 条 `Scheduled` 覆盖 618 条航线；没有旅客、票号、预订或原酒店/租车记录。展示航班号为 `SIM-<航班ID>`，机场坐标和时区随样本提供。两个演示账号与机票由脚本合成；P2.4c 根据 104 个可达机场生成 312 个酒店/房型和 208 个租车产品，覆盖 95 个城市，不导入原始旅客记录。原有 `travel_new.sqlite` 和 `travel2.sqlite` 保存在 Git 忽略的 `data/source/`，仅供可选的样本再生成；运行与部署不读取它们，也不需要放入 Docker 镜像。

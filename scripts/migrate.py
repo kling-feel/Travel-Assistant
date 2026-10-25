@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from travel_assistant.db import engine
+from scripts.container_target import assert_container_database_url
 from migrations import (v001_travel, v002_sessions, v003_actions,
                         v004_confirmations, v005_network, v006_demo_state,
                         v007_city_products, v008_flight_booking,
@@ -42,16 +43,33 @@ def assert_empty_batch_database(connection, expected_port: int):
         raise RuntimeError("New batch database already has tables")
 
 
+def assert_empty_container_database(connection):
+    assert_container_database_url(engine.url)
+    if connection.dialect.name != "postgresql":
+        raise RuntimeError("Container batch requires PostgreSQL")
+    tables = connection.execute(text(
+        "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
+    )).scalar_one()
+    if tables:
+        raise RuntimeError("Container batch database already has tables")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fresh-batch-port", type=int,
                         help="Require a specific isolated port and an empty database")
+    parser.add_argument("--fresh-batch-container", action="store_true",
+                        help="Require the empty Compose db service at db:5432")
     args = parser.parse_args()
+    if args.fresh_batch_port is not None and args.fresh_batch_container:
+        parser.error("Choose one fresh batch target")
     if args.fresh_batch_port is not None and not 1 <= args.fresh_batch_port <= 65535:
         parser.error("--fresh-batch-port must be a valid port")
     with engine.begin() as connection:
         if args.fresh_batch_port is not None:
             assert_empty_batch_database(connection, args.fresh_batch_port)
+        if args.fresh_batch_container:
+            assert_empty_container_database(connection)
         connection.execute(text(
             "CREATE TABLE IF NOT EXISTS schema_migrations "
             "(version varchar(80) PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"

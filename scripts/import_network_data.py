@@ -28,6 +28,7 @@ from travel_assistant.db.travel_models import (action_results, airports, audit_e
                               policy_documents, travelers)
 from scripts.verify_network_fixture import _shift, verify_fixture
 from scripts.migrate import MIGRATIONS
+from scripts.container_target import assert_container_database_url
 from travel_assistant.services.city_products import generate_products
 from travel_assistant.services.demo_pricing import (NETWORK_OFFER_RULE_ID, OFFER_VERSION,
                                    network_fare)
@@ -52,6 +53,15 @@ def assert_fresh_batch_target(connection, expected_port: int):
             url.host != "127.0.0.1" or url.port != expected_port or
             url.database != "travel_demo" or url.username != "travel_app"):
         raise RuntimeError("Effective database target does not match the fresh batch")
+    assert_fresh_batch_target_contents(connection)
+
+
+def assert_fresh_container_target(connection):
+    assert_container_database_url(engine.url)
+    assert_fresh_batch_target_contents(connection)
+
+
+def assert_fresh_batch_target_contents(connection):
     if connection.dialect.name != "postgresql":
         raise RuntimeError("Fresh batch requires PostgreSQL")
     versions = set(connection.execute(text("SELECT version FROM schema_migrations")).scalars())
@@ -274,7 +284,7 @@ def _formal_reset(connection, as_of, passwords, fixture_sha256, products):
 
 
 def apply_snapshot(airport_rows, flight_rows, offer_rows, as_of, passwords,
-                   fixture_sha256, fresh_batch_port=None):
+                   fixture_sha256, fresh_batch_port=None, fresh_batch_container=False):
     products = generate_products(airport_rows, flight_rows, offer_rows, as_of)
     with engine.begin() as connection:
         if connection.dialect.name != "postgresql":
@@ -282,6 +292,8 @@ def apply_snapshot(airport_rows, flight_rows, offer_rows, as_of, passwords,
         connection.execute(text("SELECT pg_advisory_xact_lock(hashtext('travel_demo_reset'))"))
         if fresh_batch_port is not None:
             assert_fresh_batch_target(connection, fresh_batch_port)
+        if fresh_batch_container:
+            assert_fresh_container_target(connection)
         _stage(connection, airport_rows, flight_rows, offer_rows)
         _formal_reset(connection, as_of, passwords, fixture_sha256, products)
 
@@ -297,13 +309,19 @@ def main():
                         help="Existing verified local pg_dump file; required for --apply")
     parser.add_argument("--fresh-batch-port", type=int,
                         help="Require this isolated port and an empty migrated database")
+    parser.add_argument("--fresh-batch-container", action="store_true",
+                        help="Require the empty migrated Compose db service at db:5432")
     args = parser.parse_args()
+    if args.fresh_batch_port is not None and args.fresh_batch_container:
+        parser.error("Choose one fresh batch target")
     if args.fresh_batch_port is not None and not 1 <= args.fresh_batch_port <= 65535:
         parser.error("--fresh-batch-port must be a valid port")
     airports_data, flights_data, offers_data, report = prepare_snapshot(args.source, args.as_of)
     with engine.connect() as connection:
         if args.fresh_batch_port is not None:
             assert_fresh_batch_target(connection, args.fresh_batch_port)
+        if args.fresh_batch_container:
+            assert_fresh_container_target(connection)
         current = {table.name: connection.execute(
             select(func.count()).select_from(table)).scalar_one()
             for table in (travelers, flights, flight_orders, hotel_orders, rental_orders,
@@ -328,7 +346,7 @@ def main():
         parser.error("Configure the two local demo passwords first")
     fixture_sha256 = hashlib.sha256(args.source.read_bytes()).hexdigest()
     apply_snapshot(airports_data, flights_data, offers_data, args.as_of, passwords,
-                   fixture_sha256, args.fresh_batch_port)
+                   fixture_sha256, args.fresh_batch_port, args.fresh_batch_container)
     print("Network snapshot applied and committed")
 
 

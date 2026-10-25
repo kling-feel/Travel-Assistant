@@ -1,0 +1,89 @@
+services:
+  db:
+    image: postgres:17.11-alpine
+    env_file:
+      - ./data/generated/p34a-container.env
+    environment:
+      POSTGRES_DB: travel_demo
+      POSTGRES_USER: travel_app
+    volumes:
+      - travel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U travel_app -d travel_demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backup:
+    profiles: [setup]
+    image: postgres:17.11-alpine
+    user: "0:0"
+    env_file:
+      - ./data/generated/p34a-container.env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - travel_backups:/backups
+    entrypoint: ["sh", "-ec"]
+    command:
+      - >-
+        test ! -e /backups/empty.dump;
+        export PGPASSWORD="$${POSTGRES_PASSWORD}";
+        pg_dump -h db -U travel_app -d travel_demo -Fc -f /backups/empty.dump;
+        pg_restore -l /backups/empty.dump > /dev/null;
+        chmod 644 /backups/empty.dump
+
+  init:
+    profiles: [setup]
+    build:
+      context: .
+      target: initializer
+    env_file:
+      - ./data/generated/p34a-container.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://travel_app:${POSTGRES_PASSWORD:?Create the isolated environment file}@db:5432/travel_demo
+      ALIYUN_IQS_ENABLED: "false"
+      AI_API_KEY: ""
+      ALIYUN_IQS_API_KEY: ""
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - travel_backups:/backups:ro
+      - travel_manifest:/run/travel
+
+  app:
+    build:
+      context: .
+      target: runtime
+    env_file:
+      - ./data/generated/p34a-container.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://travel_app:${POSTGRES_PASSWORD:?Create the isolated environment file}@db:5432/travel_demo
+      HOST: 0.0.0.0
+      PORT: "8000"
+      ALIYUN_IQS_ENABLED: "false"
+      AI_API_KEY: ""
+      ALIYUN_IQS_API_KEY: ""
+    ports:
+      - "127.0.0.1:${DEMO_APP_PORT:-8018}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+    volumes:
+      - travel_manifest:/run/travel:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  travel_pgdata:
+  travel_backups:
+  travel_manifest:

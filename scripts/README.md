@@ -23,10 +23,14 @@
 | `verify_network_fixture.py` | 核对交付样本、两日期排程与可达城市 | 只读 SQLite；无需 PostgreSQL、模型或联网密钥 |
 | `batch_environment.py` | 为新演示批次创建独立本机凭证，并用该配置运行指定命令 | 文件只写入 Git 忽略的 `data/generated/`；不会输出凭证，拒绝覆盖已有文件；普通 `run` 关闭付费服务；`run-live` 只允许已验收的 5436 批次在本机 8000 使用现有 DeepSeek 与阿里云配置 |
 | `run_p33c2_live.py` | 核对正式演示批次身份后启动本机页面；`--smoke` 限制切换验收的付费调用 | 仅读取 5436 库的日期、迁移与供给摘要；拒绝错误目标；需先完成 P3.3c2 备份、恢复与切换前核对，不执行导入或重置 |
+| `create_container_env.py` | 为独立容器项目生成一次性本机凭证 | 只写 Git 忽略的 `data/generated/p34a-container.env`，已有文件拒绝覆盖；不打印密码 |
+| `initialize_container_batch.py` | 容器项目的一次性数据库迁移与虚构数据导入 | 仅接受 `db:5432`、空库及已验证的空库备份；正常启动不会调用它，失败后不得在非空库重跑 |
+| `run_container.py` | 容器化 API 启动入口 | 核对同项目数据库地址、批次日期、迁移和供给摘要；不匹配即拒绝启动，运行中 `/ready` 检查数据库 |
+| `inspect_container_batch.py` | 恢复演练的只读摘要 | 仅接受 Compose 内 `db:5432`，输出日期、计数及订单／供给摘要，不输出密码或对话正文 |
 | `inspect_demo_batch.py` | 只读摘要指定端口的演示库日期、数量、订单状态与迁移 | 仅输出脱敏计数和摘要，不读取消息正文、密码或令牌；须先核对实际容器和端口 |
 | `verify_batch_token_isolation.py` | 验证旧批次签名的短时令牌在新批次返回 401，且新批次账号可以正常登录 | 只在已核对的隔离数据库运行；仅输出状态码，不输出令牌或密码，不创建订单 |
-| `migrate.py` | 执行版本化 PostgreSQL 迁移 | **写数据库结构和迁移记录**；新批次须加 `--fresh-batch-port`，在首个结构写入前拒绝错误端口、连接串覆盖和已有表；升级前备份 |
-| `import_network_data.py` | 导入／按新演示日重置全航线模拟数据 | 不带 `--apply` 只预览；新批次加 `--fresh-batch-port`，要求 13 版迁移和空业务库；带 `--apply --reset-demo --backup` 会**替换演示订单、会话与动作记录**，须先核对目标端口和备份；不能在演示中静默运行 |
+| `migrate.py` | 执行版本化 PostgreSQL 迁移 | **写数据库结构和迁移记录**；宿主机新批次用 `--fresh-batch-port`，容器独立项目用 `--fresh-batch-container`，均在首个结构写入前拒绝错误目标和已有表；升级前备份 |
+| `import_network_data.py` | 导入／按新演示日重置全航线模拟数据 | 不带 `--apply` 只预览；宿主机新批次用 `--fresh-batch-port`，容器独立项目用 `--fresh-batch-container`，均要求 13 版迁移和空业务库；带 `--apply --reset-demo --backup` 会**替换演示订单、会话与动作记录**，须先核对目标与备份；不能在演示中静默运行 |
 | `verify_network_data.py` | 核对导入后的机场、航线、产品和种子订单 | 只读所连接的 PostgreSQL；先核对目标库 |
 | `audit_p31e5_schedule.py` | 全量核对虚构航班时长、到达日及落地酒店覆盖 | 只读 PostgreSQL；正式库需显式 `--formal-read-only`，且先核对目标端口 |
 | `audit_p26d_secrets.py` | 检查 Git 中疑似凭证暴露，不打印凭证值 | 只读仓库；发布前可运行，发现疑点需人工核对 |

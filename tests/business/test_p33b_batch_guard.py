@@ -9,8 +9,9 @@ from unittest.mock import Mock, patch
 from sqlalchemy import URL
 
 from scripts.import_network_data import assert_fresh_batch_target, seed_policies_match
+from scripts.import_network_data import assert_fresh_container_target
 from scripts.batch_environment import GENERATED, checked_path, create, run, run_paid, run_live
-from scripts.migrate import MIGRATIONS, assert_empty_batch_database
+from scripts.migrate import MIGRATIONS, assert_empty_batch_database, assert_empty_container_database
 from travel_assistant.services.policy_catalog import SEED_POLICIES
 
 
@@ -41,6 +42,35 @@ class FreshBatchGuardTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "target"):
                 assert_fresh_batch_target(self.connection, 5433)
         self.connection.execute.assert_not_called()
+
+    def test_container_batch_refuses_non_compose_database_before_query(self):
+        with patch.dict(os.environ, {"DATABASE_URL": "postgresql+psycopg://travel_app:unused@db:5432/travel_demo"}), \
+                patch("scripts.migrate.engine.url", self.url), \
+                patch("scripts.import_network_data.engine.url", self.url):
+            with self.assertRaisesRegex(RuntimeError, "isolated Compose database"):
+                assert_empty_container_database(self.connection)
+            with self.assertRaisesRegex(RuntimeError, "isolated Compose database"):
+                assert_fresh_container_target(self.connection)
+        self.connection.execute.assert_not_called()
+
+    def test_container_batch_rejects_reused_database(self):
+        container_url = self.url.set(host="db", port=5432)
+        with patch.dict(os.environ, {"DATABASE_URL": str(container_url)}), \
+                patch("scripts.migrate.engine.url", container_url):
+            self.connection.execute.return_value.scalar_one.return_value = 1
+            with self.assertRaisesRegex(RuntimeError, "already has tables"):
+                assert_empty_container_database(self.connection)
+        self.connection.execute.reset_mock()
+        versions = Mock()
+        versions.scalars.return_value = [migration.VERSION for migration in MIGRATIONS]
+        populated = Mock()
+        populated.scalar_one.return_value = 1
+        self.connection.execute.side_effect = (versions, populated)
+        with patch.dict(os.environ, {"DATABASE_URL": str(container_url)}), \
+                patch("scripts.import_network_data.engine.url", container_url):
+            with self.assertRaisesRegex(RuntimeError, "not empty: demo_state"):
+                assert_fresh_container_target(self.connection)
+        self.assertEqual(self.connection.execute.call_count, 2)
 
     def test_existing_demo_port_is_never_a_fresh_batch_target(self):
         formal_url = self.url.set(port=5433)

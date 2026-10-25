@@ -22,6 +22,7 @@ class Settings:
         r"^/(docs|redoc|openapi.json)(/|$)",
         r"^/static/",
         r"^/health$",
+        r"^/ready$",
     ]
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
     ALGORITHM = "HS256"
