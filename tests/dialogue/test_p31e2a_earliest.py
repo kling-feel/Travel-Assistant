@@ -24,6 +24,15 @@ class _FixedActionClock(datetime):
         return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
 
 
+class _DatetimeInstanceMeta(type):
+    def __instancecheck__(cls, value):
+        return isinstance(value, datetime)
+
+
+class _FixedReadClock(_FixedActionClock, metaclass=_DatetimeInstanceMeta):
+    """Keep real datetime values valid in read-side formatting checks."""
+
+
 class EarliestJourneyTests(unittest.TestCase):
     def setUp(self):
         self.fixture = prior_cases.TransactionJourneyTests("runTest")
@@ -170,6 +179,7 @@ class EarliestJourneyTests(unittest.TestCase):
               patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
               patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 21)),
               patch("travel_assistant.services.actions.datetime", _FixedActionClock),
+              patch("travel_assistant.services.agent_reads.datetime", _FixedReadClock),
               patch("travel_assistant.services.agent_reads.find_earliest_flights", side_effect=fixed_search),
               client):
             auth = self.fixture.fixture.auth(client, "demo1", "password1")
