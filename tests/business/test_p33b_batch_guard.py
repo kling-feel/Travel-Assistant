@@ -108,7 +108,7 @@ class FreshBatchGuardTests(unittest.TestCase):
         self.connection.execute.return_value = versions
         with patch.dict(os.environ, {"DATABASE_URL": ""}), \
                 patch("scripts.import_network_data.engine.url", self.url):
-            with self.assertRaisesRegex(RuntimeError, "13 schema migrations"):
+            with self.assertRaisesRegex(RuntimeError, "14 schema migrations"):
                 assert_fresh_batch_target(self.connection, 5436)
         self.assertEqual(self.connection.execute.call_count, 1)
 

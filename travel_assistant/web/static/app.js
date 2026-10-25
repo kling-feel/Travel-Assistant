@@ -57,6 +57,8 @@ function errorText(error) {
   if (error.status === 403 || error.status === 404) return "当前账号无权查看此内容，或该记录已不存在。";
   if (error.status === 409) return "状态已变化或请求仍在处理中，请刷新后核对。";
   if (error.status === 422) return "输入不符合要求，请检查日期、机场和必填内容。";
+  if (error.status === 429) return "请求太频繁，请稍后再试。";
+  if (error.message === "provider_balance") return "模型服务额度或余额不足，管理员需要核对服务商账户；订单没有因此改变。";
   if (error.status === 503) return "模型或数据服务暂时不可用，请稍后重试。";
   return "请求未完成，请检查连接并重试。";
 }

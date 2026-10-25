@@ -11,6 +11,7 @@ import httpx
 from sqlalchemy import select
 
 from travel_assistant.core.config import settings
+from travel_assistant.services.provider_usage import record as record_provider_usage
 from travel_assistant.db.travel_models import (airports, demo_state, flight_offers, flight_orders,
                               flights, hotel_orders, hotel_products, hotels)
 from travel_assistant.services.recommendation_geography import (airport_geography,
@@ -38,7 +39,8 @@ class UnavailableRecommendationProvider:
 def get_recommendation_provider() -> RecommendationProvider:
     key = settings.ALIYUN_IQS_API_KEY.strip()
     if settings.ALIYUN_IQS_ENABLED and key:
-        return ReviewedCatalogProvider(CleverSeeRecommendationProvider(key))
+        live = CleverSeeRecommendationProvider(key)
+        return ReviewedCatalogProvider(MeteredRecommendationProvider(live) if settings.CLOUD_MODE else live)
     return ReviewedCatalogProvider()
 
 
@@ -148,6 +150,25 @@ class RecommendationSearchError(Exception):
         super().__init__(kind)
 
 
+class MeteredRecommendationProvider:
+    """Count each upstream search attempt, including provider errors."""
+
+    live_source = True
+
+    def __init__(self, source):
+        self.source = source
+
+    def search(self, city, preference, country=None):
+        try:
+            result = self.source.search(city, preference, country)
+        except RecommendationSearchError as error:
+            record_provider_usage("search", error.kind if error.kind in (
+                "authentication", "balance", "limited", "timeout") else "upstream")
+            raise
+        record_provider_usage("search", "success")
+        return result
+
+
 class CleverSeeRecommendationProvider:
     """Search public city/theme words and keep only directly supported places."""
 
@@ -181,6 +202,8 @@ class CleverSeeRecommendationProvider:
                                    json=body) as response:
                     if response.status_code in (401, 403):
                         raise RecommendationSearchError("authentication")
+                    if response.status_code == 402:
+                        raise RecommendationSearchError("balance")
                     if response.status_code == 429:
                         raise RecommendationSearchError("limited")
                     if response.status_code != 200:
@@ -633,6 +656,7 @@ def read_recommendation(db, traveler_id: str, user_text: str, params: dict,
         reasons = {
             "unconfigured": "尚未配置联网搜索",
             "authentication": "联网搜索认证或服务开通异常",
+            "balance": "联网搜索额度或余额不足，请管理员核对服务商账户",
             "limited": "联网搜索已限流或达到额度",
             "timeout": "联网搜索超时",
             "upstream": "联网搜索暂时不可用",

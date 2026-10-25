@@ -45,6 +45,8 @@ P3.1h1 之后，在“对话助手”按发送，旅客原文立即显示，助�
 
 ## 独立容器部署验收（P3.4a）
 
+计划中的云端展示使用另一个 Compose 文件和新数据卷；服务器、域名与公网验收顺序见[云端展示操作指南](docs/enterprise/云端展示操作指南.md)。当前尚未购买或部署，下面仍是本机隔离验收操作。
+
 本节只使用 `travel-p34a` 独立项目，页面绑定本机 `127.0.0.1:8018`，数据库**不映射宿主机端口**。现有 8000→5436 演示入口、旧 5433 批次及其数据卷不会被这些命令替换。第一次运行须已安装并启动 Docker Desktop，且 8018 端口空闲；在项目根目录的普通 PowerShell **逐行**执行：
 
 ```powershell
@@ -57,7 +59,7 @@ docker compose -f compose.container.yaml --env-file data/generated/p34a-containe
 docker compose -f compose.container.yaml --env-file data/generated/p34a-container.env -p travel-p34a ps
 ```
 
-第一行只创建 Git 忽略的独立密码文件，已有文件时拒绝覆盖。`backup` 为迁移前空库做 PostgreSQL 自定义格式备份；`init` 仅在空库和备份均经核对后执行 13 版迁移并导入虚构样本，写出批次摘要；普通 `up` 和容器重启不会执行这两步。**任何一行失败就停止，不在非空库上重跑 `init` 或 `pg_restore`。** 如需新的演示日期，按[演示批次流程](docs/enterprise/操作计划/P3.3-演示日期维护与部署分步路线.md)另建独立项目与卷，不修改此批次订单日期。
+第一行只创建 Git 忽略的独立密码文件，已有文件时拒绝覆盖。`backup` 为迁移前空库做 PostgreSQL 自定义格式备份；`init` 仅在空库和备份均经核对后执行当前完整迁移并导入虚构样本，写出批次摘要；普通 `up` 和容器重启不会执行这两步。**任何一行失败就停止，不在非空库上重跑 `init` 或 `pg_restore`。** 如需新的演示日期，按[演示批次流程](docs/enterprise/操作计划/P3.3-演示日期维护与部署分步路线.md)另建独立项目与卷，不修改此批次订单日期。
 
 成功后打开 `http://127.0.0.1:8018/app`。示例账号 `demo1`、`demo2` 的密码在本机 `data/generated/p34a-container.env`，不要发送到聊天或提交。容器验收默认关闭付费模型和联网检索；登录、查询、已保存的订单与确认卡仍可用。`/health` 表示 API 进程存活，`/ready` 才检查数据库已有演示批次。检查、停止与再启动：
 

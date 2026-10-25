@@ -588,7 +588,8 @@ def read_for_assistant(db, traveler_id, intent, params):
         except WeatherSearchError as exc:
             reasons = {"unconfigured": "联网搜索尚未配置", "coverage": "目前仅支持中国可达城市的天气核验",
                        "date": "目前只能核验未来七天内的天气", "timeout": "联网搜索超时",
-                       "limited": "联网搜索已限流", "authentication": "联网搜索认证失败"}
+                       "limited": "联网搜索已限流", "authentication": "联网搜索认证失败",
+                       "balance": "联网搜索额度或余额不足，请管理员核对服务商账户"}
             return _result(f"暂时无法核实 {city_zh(city)} {target} 的天气："
                            f"{reasons.get(str(exc), '搜索服务暂不可用')}。")
         if not forecast:

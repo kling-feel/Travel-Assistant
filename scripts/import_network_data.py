@@ -66,13 +66,16 @@ def assert_fresh_batch_target_contents(connection):
         raise RuntimeError("Fresh batch requires PostgreSQL")
     versions = set(connection.execute(text("SELECT version FROM schema_migrations")).scalars())
     if versions != {migration.VERSION for migration in MIGRATIONS}:
-        raise RuntimeError("Fresh batch requires all 13 schema migrations")
+        raise RuntimeError(f"Fresh batch requires all {len(MIGRATIONS)} schema migrations")
     for table in (demo_state, travelers, airports, flights, flight_offers, hotels,
                   hotel_products, rental_products, flight_orders, hotel_orders,
                   rental_orders, chat_sessions, chat_messages, chat_turns,
                   pending_actions, action_results, audit_events):
         if connection.execute(select(func.count()).select_from(table)).scalar_one():
             raise RuntimeError(f"Fresh batch is not empty: {table.name}")
+    if connection.execute(text("SELECT to_regclass('public.provider_usage_events')")).scalar_one():
+        if connection.execute(text("SELECT count(*) FROM provider_usage_events")).scalar_one():
+            raise RuntimeError("Fresh batch is not empty: provider_usage_events")
     existing_policies = connection.execute(select(policy_documents)).mappings()
     if not seed_policies_match(existing_policies):
         raise RuntimeError("Fresh batch has unexpected policy records")
@@ -228,6 +231,8 @@ def _assert_reset_safe(connection):
 
 def _formal_reset(connection, as_of, passwords, fixture_sha256, products):
     _assert_reset_safe(connection)
+    if connection.execute(text("SELECT to_regclass('public.provider_usage_events')")).scalar_one():
+        connection.execute(text("DELETE FROM provider_usage_events"))
     if connection.execute(text("SELECT to_regclass('public.checkpoints')")).scalar_one() is not None:
         for table_name in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
             connection.execute(text(f"DELETE FROM {table_name}"))

@@ -46,7 +46,11 @@ from travel_assistant.services.recommendations import (get_recommendation_provid
                                       read_recommendation)
 from travel_assistant.agents.controlled import build_graph
 from travel_assistant.core.dependencies import get_db
-from travel_assistant.core.password_hash import verify_password
+from travel_assistant.core.password_hash import get_hashed_password, verify_password
+from travel_assistant.core.request_limits import cloud_limits
+from travel_assistant.services.provider_usage import (
+    ProviderBalanceError, current_traveler as usage_traveler, summary as usage_summary,
+)
 
 
 router = APIRouter()
@@ -54,6 +58,7 @@ bearer = HTTPBearer()
 logger = logging.getLogger(__name__)
 turn_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="travel-turn")
 turn_slots = BoundedSemaphore(16)
+_DUMMY_HASH = get_hashed_password("no-such-traveler")
 
 
 class _MemoryOnlyModel:
@@ -89,7 +94,7 @@ def _card_brief(card):
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=200)
 
 
 class SessionCreate(BaseModel):
@@ -157,11 +162,21 @@ def current_traveler(credentials: HTTPAuthorizationCredentials = Depends(bearer)
 def login(data: LoginRequest, session: Session = Depends(get_db)):
     if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY.startswith("replace-with"):
         raise HTTPException(503, "JWT secret is not configured")
+    if settings.CLOUD_MODE and not cloud_limits.allow_login(data.username):
+        raise HTTPException(429, "too many login attempts", headers={"Retry-After": "60"})
     traveler = session.execute(select(travelers).where(
         travelers.c.username == data.username, travelers.c.active == 1
     )).mappings().one_or_none()
-    if traveler is None or not verify_password(data.password, traveler["password_hash"]):
+    valid = verify_password(data.password,
+                            traveler["password_hash"] if traveler else _DUMMY_HASH)
+    if settings.CLOUD_MODE:
+        cloud_limits.login_result(data.username, bool(traveler and valid))
+    if traveler is None or not valid:
+        if settings.CLOUD_MODE:
+            logger.warning("cloud_login_failed known_account=%s", traveler is not None)
         raise HTTPException(401, "invalid credentials")
+    if settings.CLOUD_MODE:
+        logger.info("cloud_login_succeeded traveler_id=%s", traveler["id"])
     expires = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
@@ -175,6 +190,15 @@ def login(data: LoginRequest, session: Session = Depends(get_db)):
 def me(traveler=Depends(current_traveler)):
     return {"id": traveler["id"], "username": traveler["username"],
             "display_name": traveler["display_name"]}
+
+
+@router.get("/me/provider-usage")
+def my_provider_usage(days: int = Query(default=7, ge=1, le=31),
+                      traveler=Depends(current_traveler),
+                      session: Session = Depends(get_db)):
+    if not settings.CLOUD_MODE:
+        raise HTTPException(404, "usage report is available in cloud mode")
+    return usage_summary(session, traveler["id"], days)
 
 
 @router.get("/demo-state")
@@ -386,10 +410,24 @@ def add_user_message(session_id: str, data: UserMessage,
 def conversation_turn(session_id: str, data: TurnRequest,
                       traveler=Depends(current_traveler),
                       session: Session = Depends(get_db)):
+    if settings.CLOUD_MODE:
+        with cloud_limits.turn(traveler["id"]) as allowed:
+            if not allowed:
+                raise HTTPException(429, "too many conversation requests",
+                                    headers={"Retry-After": "60"})
+            return _process_turn(session_id, data, traveler["id"], session)
     return _process_turn(session_id, data, traveler["id"], session)
 
 
 def _process_turn(session_id, data, traveler_id, session, progress=None):
+    token = usage_traveler.set(traveler_id)
+    try:
+        return _process_turn_inner(session_id, data, traveler_id, session, progress)
+    finally:
+        usage_traveler.reset(token)
+
+
+def _process_turn_inner(session_id, data, traveler_id, session, progress=None):
     try:
         get_session_history(session, traveler_id, session_id)
     except SessionNotFound as error:
@@ -578,7 +616,8 @@ def _process_turn(session_id, data, traveler_id, session, progress=None):
             session.commit()
         except Exception:
             session.rollback()
-        raise HTTPException(503, "conversation turn failed") from error
+        detail = "provider_balance" if isinstance(error, ProviderBalanceError) else "conversation turn failed"
+        raise HTTPException(503, detail) from error
 
 
 def _turn_event(name, payload):
@@ -628,7 +667,13 @@ def conversation_turn_stream(session_id: str, data: TurnRequest,
         loop = asyncio.get_running_loop()
         queue = asyncio.Queue()
 
+        if settings.CLOUD_MODE and not cloud_limits.acquire_turn(traveler_id):
+            yield _turn_event("failed", {"code": "rate_limited", "status": 429,
+                                         "request_key": data.request_key})
+            return
         if not turn_slots.acquire(blocking=False):
+            if settings.CLOUD_MODE:
+                cloud_limits.release_turn(traveler_id)
             yield _turn_event("failed", {"code": "busy", "status": 503,
                                          "request_key": data.request_key})
             return
@@ -653,6 +698,7 @@ def conversation_turn_stream(session_id: str, data: TurnRequest,
                 code = ("processing" if error.status_code == 409 else
                         "not_found" if error.status_code == 404 else
                         "invalid_input" if error.status_code == 422 else
+                        "provider_balance" if error.detail == "provider_balance" else
                         "unavailable")
                 send("failed", {"code": code, "status": error.status_code,
                                 "request_key": data.request_key})
@@ -662,11 +708,15 @@ def conversation_turn_stream(session_id: str, data: TurnRequest,
                                 "request_key": data.request_key})
             finally:
                 turn_slots.release()
+                if settings.CLOUD_MODE:
+                    cloud_limits.release_turn(traveler_id)
 
         try:
             loop.run_in_executor(turn_executor, work)
         except RuntimeError:
             turn_slots.release()
+            if settings.CLOUD_MODE:
+                cloud_limits.release_turn(traveler_id)
             yield _turn_event("failed", {"code": "busy", "status": 503,
                                          "request_key": data.request_key})
             return

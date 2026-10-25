@@ -15,6 +15,9 @@ from tests.dialogue import test_p31e1_transaction_journey as earlier
 
 class LocationJourneyTests(unittest.TestCase):
     def setUp(self):
+        clock = patch("travel_assistant.services.agent_reads.datetime", earlier._FixedReadClock)
+        clock.start()
+        self.addCleanup(clock.stop)
         self.case = earlier.TransactionJourneyTests("runTest")
         self.case.setUp()
         self.fixture = self.case.fixture

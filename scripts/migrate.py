@@ -15,14 +15,14 @@ from migrations import (v001_travel, v002_sessions, v003_actions,
                         v007_city_products, v008_flight_booking,
                         v009_rental_orders, v010_hotel_refunds,
                         v011_rental_changes, v012_chat_turns,
-                        v013_turn_action_cards)
+                        v013_turn_action_cards, v014_provider_usage)
 
 MIGRATIONS = (v001_travel, v002_sessions, v003_actions,
               v004_confirmations, v005_network, v006_demo_state,
               v007_city_products, v008_flight_booking,
               v009_rental_orders, v010_hotel_refunds,
               v011_rental_changes, v012_chat_turns,
-              v013_turn_action_cards)
+              v013_turn_action_cards, v014_provider_usage)
 
 
 def assert_empty_batch_database(connection, expected_port: int):

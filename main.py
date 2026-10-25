@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import text
 from travel_assistant.core.config import settings
 from travel_assistant.core import handler_error, cors
@@ -17,7 +18,16 @@ class Server:
 
     def __init__(self):
         init_log()  # 加载日志的配置
-        self.app = FastAPI()
+        self.app = FastAPI(
+            docs_url=None if settings.CLOUD_MODE else "/docs",
+            redoc_url=None if settings.CLOUD_MODE else "/redoc",
+            openapi_url=None if settings.CLOUD_MODE else "/openapi.json",
+        )
+        if settings.CLOUD_MODE:
+            self.app.add_middleware(
+                TrustedHostMiddleware,
+                allowed_hosts=[settings.PUBLIC_HOST, "localhost", "127.0.0.1"],
+            )
         self.app.add_api_route('/health', lambda: {'status': 'ok'}, methods=['GET'], include_in_schema=False)
         self.app.add_api_route('/ready', self.ready, methods=['GET'], include_in_schema=False)
         self.app.add_api_route('/app', self.traveler_page, methods=['GET'], include_in_schema=False)

@@ -1,12 +1,14 @@
-FROM python:3.11-slim-bookworm AS runtime
+ARG PYTHON_BASE_IMAGE=python:3.11-slim-bookworm
+FROM ${PYTHON_BASE_IMAGE} AS runtime
+ARG REQUIREMENTS_FILE=requirements.txt
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir -r "$REQUIREMENTS_FILE" \
     && groupadd --gid 10001 travel \
     && useradd --uid 10001 --gid travel --no-create-home travel
 

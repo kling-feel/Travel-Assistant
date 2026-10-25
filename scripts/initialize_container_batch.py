@@ -3,10 +3,11 @@
 import hashlib
 import json
 import os
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 import subprocess
 import sys
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.container_target import assert_container_database_url
 from scripts.inspect_demo_batch import summarize
 from scripts.migrate import assert_empty_container_database
+from scripts.migrate import MIGRATIONS
 from travel_assistant.db import engine
 
 
@@ -27,7 +29,7 @@ FIXTURE = ROOT / "data/fixtures/network_source.sqlite"
 def main():
     assert_container_database_url(engine.url)
     as_of = date.fromisoformat(os.environ["DEMO_BATCH_DATE"])
-    if as_of > date.today():
+    if as_of > datetime.now(ZoneInfo("Asia/Shanghai")).date():
         raise RuntimeError("The fictional batch date cannot be in the future")
     if MANIFEST.exists():
         raise RuntimeError("Batch manifest already exists; refusing to initialize again")
@@ -47,7 +49,7 @@ def main():
         report = summarize(connection)
     if (report["as_of"] != as_of.isoformat() or
             report["fixture_sha256"] != hashlib.sha256(FIXTURE.read_bytes()).hexdigest() or
-            len(report["migration_versions"]) != 13 or
+            len(report["migration_versions"]) != len(MIGRATIONS) or
             report["counts"]["airports"] != 115 or
             report["counts"]["flights"] != 33121 or
             report["counts"]["travelers"] != 2):

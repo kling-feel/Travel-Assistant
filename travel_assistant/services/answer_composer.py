@@ -3,6 +3,7 @@
 import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from travel_assistant.services.provider_usage import ProviderBalanceError
 
 
 READ_INTENTS = frozenset({"itinerary", "policy", "flight_search", "hotel_search",
@@ -62,6 +63,8 @@ def compose_verified_answer(model, intent, user_text, answer, references):
         reply = model.invoke([SystemMessage(content=prompt),
                               HumanMessage(content=json.dumps(payload, ensure_ascii=False))])
         plan = json.loads(reply.content)
+    except ProviderBalanceError:
+        return answer + "\n模型服务额度或余额不足；以上仍是已核实的查询结果，请管理员核对账户。"
     except (AttributeError, TypeError, ValueError, RuntimeError, TimeoutError):
         return answer
     except Exception:
@@ -93,10 +96,25 @@ class ComposingModel:
         self.backend = backend
 
     def invoke(self, messages):
-        return self.backend.invoke(messages)
+        from travel_assistant.services.provider_usage import (
+            ProviderBalanceError, classify_error, record,
+        )
+        try:
+            result = self.backend.invoke(messages)
+        except Exception as error:
+            outcome = classify_error(error)
+            record("model", outcome)
+            if outcome == "balance":
+                raise ProviderBalanceError("model balance is insufficient") from error
+            raise
+        usage = getattr(result, "usage_metadata", None) or {}
+        record("model", "success",
+               input_tokens=usage.get("input_tokens"),
+               output_tokens=usage.get("output_tokens"))
+        return result
 
     def __getattr__(self, name):
         return getattr(self.backend, name)
 
     def compose(self, intent, user_text, answer, references):
-        return compose_verified_answer(self.backend, intent, user_text, answer, references)
+        return compose_verified_answer(self, intent, user_text, answer, references)

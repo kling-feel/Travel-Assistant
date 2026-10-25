@@ -20,6 +20,18 @@ class _FixedActionClock(datetime):
         return value.astimezone(tz) if tz else value.replace(tzinfo=None)
 
 
+class _ReadClockMeta(type):
+    def __instancecheck__(cls, value):
+        return isinstance(value, datetime)
+
+
+class _FixedReadClock(datetime, metaclass=_ReadClockMeta):
+    @classmethod
+    def now(cls, tz=None):
+        value = datetime(2026, 10, 21, 4, tzinfo=timezone.utc)
+        return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+
+
 class TransactionJourneyTests(unittest.TestCase):
     def setUp(self):
         self.fixture = dialogue_cases.DialogueTests("runTest")
@@ -81,7 +93,8 @@ class TransactionJourneyTests(unittest.TestCase):
         with (model_patch, saver_patch,
               patch("travel_assistant.agents.controlled.local_today",
                     return_value=date(2026, 10, 21)),
-              patch("travel_assistant.services.actions.datetime", _FixedActionClock), client):
+              patch("travel_assistant.services.actions.datetime", _FixedActionClock),
+              patch("travel_assistant.services.agent_reads.datetime", _FixedReadClock), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             found = self.fixture.turn(client, sid, auth, "flight-search-001",

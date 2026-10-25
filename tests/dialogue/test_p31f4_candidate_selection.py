@@ -2,6 +2,7 @@
 
 import unittest
 from datetime import date, datetime, timedelta, timezone
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import insert, select, update
@@ -11,6 +12,7 @@ from travel_assistant.db.travel_models import (demo_state, flight_offers, flight
                               rental_orders, rental_products)
 from tests.business.test_p2_actions import ActionFixture
 from tests.dialogue import test_p26a_dialogue as dialogue_cases
+from tests.dialogue.test_p31e1_transaction_journey import _FixedActionClock
 
 
 class CandidateFlightTests(unittest.TestCase):
@@ -30,6 +32,9 @@ class CandidateFlightTests(unittest.TestCase):
         self.fixture.tearDown()
 
     def test_flight_selection_rechecks_quote_and_owner_without_order_write(self):
+        clock = patch("travel_assistant.services.actions.datetime", _FixedActionClock)
+        clock.start()
+        self.addCleanup(clock.stop)
         with TestClient(self.fixture.app()) as client:
             auth = self.fixture.auth(client, "demo1", "password1")
             other = self.fixture.auth(client, "demo2", "password2")

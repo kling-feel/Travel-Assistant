@@ -1,6 +1,7 @@
 **
 !Dockerfile
 !requirements.txt
+!requirements.lock
 !main.py
 !travel_assistant/
 !travel_assistant/**
@@ -11,6 +12,8 @@
 !scripts/create_container_env.py
 !scripts/initialize_container_batch.py
 !scripts/run_container.py
+!scripts/manage_travelers.py
+!scripts/usage_report.py
 !scripts/migrate.py
 !scripts/import_network_data.py
 !scripts/verify_network_fixture.py

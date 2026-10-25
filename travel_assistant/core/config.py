@@ -10,6 +10,9 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 
 class Settings:
+    CLOUD_MODE = os.getenv("CLOUD_MODE", "false").lower() == "true"
+    CLOUD_ACCEPTANCE_MODE = os.getenv("CLOUD_ACCEPTANCE_MODE", "false").lower() == "true"
+    PUBLIC_HOST = os.getenv("PUBLIC_HOST", "").strip().lower()
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     HOST = os.getenv("HOST", "127.0.0.1")
     PORT = int(os.getenv("PORT", "8000"))

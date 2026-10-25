@@ -41,6 +41,21 @@ def summarize(connection):
                                      ensure_ascii=False, default=str).encode())
         order_statuses[table.name] = statuses
     versions = sorted(connection.execute(text("SELECT version FROM schema_migrations")).scalars())
+    activity = hashlib.sha256()
+    for table in (chat_sessions, chat_messages, chat_turns, pending_actions,
+                  action_results, audit_events):
+        for row in connection.execute(select(table).order_by(*table.primary_key.columns)).mappings():
+            activity.update(json.dumps((table.name, dict(row)), sort_keys=True,
+                                       ensure_ascii=False, default=str).encode())
+    if connection.execute(text("SELECT to_regclass('public.provider_usage_events')")).scalar_one():
+        counts["provider_usage_events"] = connection.execute(text(
+            "SELECT count(*) FROM provider_usage_events"
+        )).scalar_one()
+        for row in connection.execute(text(
+                "SELECT * FROM provider_usage_events ORDER BY id"
+        )).mappings():
+            activity.update(json.dumps(("provider_usage_events", dict(row)),
+                                       sort_keys=True, ensure_ascii=False, default=str).encode())
     checkpoints = {}
     if connection.execute(text("SELECT to_regclass('public.checkpoints')")).scalar_one():
         for name in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
@@ -56,6 +71,7 @@ def summarize(connection):
             "counts": counts, "order_statuses": order_statuses,
             "migration_versions": versions, "checkpoint_counts": checkpoints,
             "order_digest": digest.hexdigest(), "supply_digest": supply.hexdigest(),
+            "activity_digest": activity.hexdigest(),
             "non_demo_accounts": connection.execute(select(func.count()).select_from(travelers)
                 .where(~travelers.c.username.in_(("demo1", "demo2")))).scalar_one()}
 

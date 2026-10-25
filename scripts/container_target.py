@@ -1,6 +1,12 @@
 """Guard the one-off container batch commands against other databases."""
 
 import os
+import re
+
+
+PUBLIC_DOMAIN = re.compile(
+    r"(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\Z"
+)
 
 
 def assert_container_database_url(url):

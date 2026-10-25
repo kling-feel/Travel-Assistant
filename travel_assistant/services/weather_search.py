@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from travel_assistant.core.config import settings
+from travel_assistant.services.provider_usage import record as record_provider_usage
 from travel_assistant.services.location_labels import city_zh
 from travel_assistant.services.recommendation_geography import country_for_fixture_city
 
@@ -166,21 +167,31 @@ def search_weather(city: str, target: date, *, transport=None,
                                headers={"Authorization": f"Bearer {key}"},
                                json=body) as response:
                 if response.status_code in (401, 403):
+                    record_provider_usage("search", "authentication")
                     raise WeatherSearchError("authentication")
+                if response.status_code == 402:
+                    record_provider_usage("search", "balance")
+                    raise WeatherSearchError("balance")
                 if response.status_code == 429:
+                    record_provider_usage("search", "limited")
                     raise WeatherSearchError("limited")
                 if response.status_code != 200:
+                    record_provider_usage("search", "upstream")
                     raise WeatherSearchError("upstream")
                 payload = bytearray()
                 for chunk in response.iter_bytes():
                     payload.extend(chunk)
                     if len(payload) > 256_000:
+                        record_provider_usage("search", "upstream")
                         raise WeatherSearchError("invalid")
                 data = httpx.Response(200, content=bytes(payload)).json()
     except httpx.TimeoutException as exc:
+        record_provider_usage("search", "timeout")
         raise WeatherSearchError("timeout") from exc
     except (httpx.HTTPError, ValueError) as exc:
+        record_provider_usage("search", "upstream")
         raise WeatherSearchError("upstream") from exc
+    record_provider_usage("search", "success")
     if not isinstance(data, dict) or not isinstance(data.get("pageItems"), list):
         raise WeatherSearchError("invalid")
     context = data.get("queryContext")
