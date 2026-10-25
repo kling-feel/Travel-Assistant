@@ -27,6 +27,8 @@
 | `create_cloud_env.py` | 生成独立云端配置模板 | 要求已确定域名、证书邮箱和演示日期；只写 Git 忽略的配置，不复制本机模型密钥，仍需填入云端独立密钥与镜像摘要 |
 | `manage_travelers.py` | 云端授权账号的创建、轮换、停用 | 只在隔离的管理容器中使用；一次性口令写私有文件，不打印口令；先停用初始账号再开放页面 |
 | `usage_report.py` | 管理员查看模型与搜索调用次数 | 只读取云端用量元数据，不读取消息正文或密钥；实际费用仍以服务商账单为准 |
+| `create_cloud_2g_env.py`／`create_cloud_2g_restore_env.py` | 生成 P3.4b2 独立 2 GiB 限额和恢复演练配置 | 仅写 Git 忽略目录，使用不可调用真实服务的测试密钥；已有文件拒绝覆盖 |
+| `monitor_cloud_2g.py`／`verify_cloud_2g.py`／`verify_cloud_2g_restart.py` | 采样隔离容器内存并验收双账号、查询、交易卡和重启 | 只针对本机 8021／8022 与 `travel-p34b-2g`；结果不代表真实香港服务器或付费模型性能 |
 | `lock_dependencies.py` | 为云端 Linux 构建固定依赖版本 | 从当前虚拟环境生成 `requirements.lock`；更换依赖后需重建并在全新镜像验证 |
 | `initialize_container_batch.py` | 容器项目的一次性数据库迁移与虚构数据导入 | 仅接受 `db:5432`、空库及已验证的空库备份；正常启动不会调用它，失败后不得在非空库重跑 |
 | `run_container.py` | 容器化 API 启动入口 | 核对同项目数据库地址、批次日期、迁移和供给摘要；不匹配即拒绝启动，运行中 `/ready` 检查数据库 |
