@@ -51,7 +51,7 @@ rental_book: product_id, pickup_at, dropoff_at；rental_change: order_id, pickup
 例如“预订航班 SIM-15890”输出 {{"intent":"transaction","params":{{"actions":[{{"action_type":"flight_book","parameters":{{"flight_id":15890}}}}]}},"answer":""}}。
 queries 每项只有 intent 和 params，intent 只能是 flight_search、hotel_search、rental_search、itinerary。
 若对象或条件不明确，仍写出用户明确要求的动作并省略未知字段，可提出 queries 以展示候选；绝不声称已预订。
-不知道参数时留空，不能编造机场、日期、订单、价格或政策。general 的 answer 只回答问候、偏好澄清等普通话题，
+不知道参数时留空，不能编造机场、日期、订单、价格或政策。整理行李等旅行准备建议属于 general，不要转成景点推荐。general 的 answer 可回答问候、偏好澄清和不需要实时事实的旅行准备话题，
 不得声称已预订或给出未经核实的地点、票价、真实航司政策。其他 intent 的 answer 留空。
 当前中国日期：{current_date}；演示数据基准日：{demo_date}。相对日期以当前中国日期为准。旅客与助手最近消息：\n{history}"""
 
@@ -128,6 +128,12 @@ def _safe_general(draft):
             or re.search(r"\d|已预订|已改签|已取消|付款成功|退款成功|票价|航司政策|开放时间", draft)):
         return "我可以帮你查询行程、航班、酒店、租车和本平台政策。请告诉我具体需求。"
     return draft.strip()
+
+
+def _packing_advice_request(text):
+    return (bool(re.search(r"行李|打包|收拾|收纳", text)) and
+            bool(re.search(r"建议|怎么|如何|方法|清单|准备", text)) and
+            not re.search(r"政策|限额|托运|手提|航司|航空|费用|收费|机场|机票|航班|寄存", text))
 
 
 def _scoped_candidates(intent, references, params, *, earliest_id=None,
@@ -599,6 +605,12 @@ def build_graph(model, read_evidence, checkpointer):
             draft = "我暂时无法确认你的需求。请换一种说法，或明确查询的业务类型。"
         if not isinstance(params, dict):
             params = {}
+        if _packing_advice_request(user_text) and not writes:
+            answer = _safe_general(draft) if intent == "general" else ""
+            if not answer or answer.startswith("我可以帮你查询行程"):
+                answer = ("先按行程天数和目的地天气准备衣物，证件、药品和充电用品放在随身包里；"
+                          "出发前再核对行李清单。告诉我目的地和天数，我可以帮你细化准备建议。")
+            return {"intent": "general", "params": {}, "draft": answer}
         if intent == "transaction" and re.search(r"景点|游览|门票", user_text) and re.search(
                 r"预订|订|购买|购票|买|预约|改期|取消", user_text):
             return {"intent": "recommendation", "params": {}, "draft": ""}

@@ -186,7 +186,9 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
                                        r"(?:航班|机票).{0,8}(?:查询|搜索)", text))
     earliest = bool(re.search(r"最早|最近.{0,8}(?:能|可).{0,4}(?:走|飞|出发|起飞)|"
                               r"(?:什么时候|何时).{0,8}(?:能|可)?.{0,4}(?:走|飞|出发|起飞)", text))
-    recommendation = bool(re.search(r"推荐|旅游|旅行|好看|好玩|去哪", text))
+    recommendation = bool(re.search(r"推荐|好看|好玩|去哪", text) or
+                          re.search(r"旅游|旅行", text) and
+                          (places or re.search(r"目的地|城市|景点|地方|哪里|哪儿|哪个国家", text)))
     if weather:
         city = places[-1] if places else previous.get("city")
         return "weather", {"city": city, "target_date": (dates[0].isoformat() if dates else None)}, previous

@@ -15,6 +15,9 @@ from travel_assistant.services.reviewed_places import places_for_city
 from travel_assistant.services.weather_search import search_weather
 
 
+_INDOOR_NATURE_VENUE = re.compile(r"museum|museu|博物馆|科学馆|aquarium|水族馆", re.I)
+
+
 def discover_destinations(db, origin: str, travel_day: date, preference: str | None = None,
                           *, user_text="", provider=None, weather_lookup=None, now=None):
     """Only offered direct flights on the origin's local day can be recommended."""
@@ -74,7 +77,19 @@ def discover_destinations(db, origin: str, travel_day: date, preference: str | N
             places = places_for_city(city, country["code"], preference) if country else []
         except (OSError, ValueError):
             places = []
+        if preference == "nature":
+            places = [place for place in places if not _INDOOR_NATURE_VENUE.search(
+                f"{place['name']} {place['display_name_zh']}")]
         candidates.append((row, places, country))
+    if preference:
+        candidates = [item for item in candidates if item[1]]
+        if not candidates:
+            label = {"nature": "自然风景", "history": "历史", "culture": "文化",
+                     "food": "美食"}.get(preference, "所述偏好")
+            return {"answer": f"{travel_day} 从{city_zh(origins[0].city)}出发有可售的模拟直达航班，"
+                    f"但目的地没有近期核查且符合{label}偏好的地点资料。"
+                    "可以放宽偏好或调整出行日期，我不会用其他主题的地点补足推荐。",
+                    "references": [], "options": [], "travel_date": travel_day.isoformat()}
     candidates.sort(key=lambda item: (not bool(item[1]), item[0]["departure_at"],
                                       item[0]["amount"], item[0]["city"]))
     selected = candidates[:3]

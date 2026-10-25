@@ -21,7 +21,8 @@
 | `build_network_fixture.py` | 从获授权原始 SQLite 导出无旅客信息的交付样本 | 只读输入、写指定新输出；拒绝覆盖。日常运行不依赖 `data/source/` |
 | `build_recommendation_geography.py` | 从交付样本和时区资料生成城市地理表 | 只读样本，写生成文件；仅在样本变更后使用 |
 | `verify_network_fixture.py` | 核对交付样本、两日期排程与可达城市 | 只读 SQLite；无需 PostgreSQL、模型或联网密钥 |
-| `batch_environment.py` | 为新演示批次创建独立本机凭证，并用该配置运行指定命令 | 文件只写入 Git 忽略的 `data/generated/`；不会输出凭证，拒绝覆盖已有文件；运行时清空旧连接串并关闭付费服务密钥 |
+| `batch_environment.py` | 为新演示批次创建独立本机凭证，并用该配置运行指定命令 | 文件只写入 Git 忽略的 `data/generated/`；不会输出凭证，拒绝覆盖已有文件；普通 `run` 关闭付费服务；`run-live` 只允许已验收的 5436 批次在本机 8000 使用现有 DeepSeek 与阿里云配置 |
+| `run_p33c2_live.py` | 核对正式演示批次身份后启动本机页面；`--smoke` 限制切换验收的付费调用 | 仅读取 5436 库的日期、迁移与供给摘要；拒绝错误目标；需先完成 P3.3c2 备份、恢复与切换前核对，不执行导入或重置 |
 | `inspect_demo_batch.py` | 只读摘要指定端口的演示库日期、数量、订单状态与迁移 | 仅输出脱敏计数和摘要，不读取消息正文、密码或令牌；须先核对实际容器和端口 |
 | `verify_batch_token_isolation.py` | 验证旧批次签名的短时令牌在新批次返回 401，且新批次账号可以正常登录 | 只在已核对的隔离数据库运行；仅输出状态码，不输出令牌或密码，不创建订单 |
 | `migrate.py` | 执行版本化 PostgreSQL 迁移 | **写数据库结构和迁移记录**；新批次须加 `--fresh-batch-port`，在首个结构写入前拒绝错误端口、连接串覆盖和已有表；升级前备份 |

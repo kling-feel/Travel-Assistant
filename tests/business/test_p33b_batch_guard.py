@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 from sqlalchemy import URL
 
 from scripts.import_network_data import assert_fresh_batch_target, seed_policies_match
-from scripts.batch_environment import GENERATED, checked_path, create, run, run_paid
+from scripts.batch_environment import GENERATED, checked_path, create, run, run_paid, run_live
 from scripts.migrate import MIGRATIONS, assert_empty_batch_database
 from travel_assistant.services.policy_catalog import SEED_POLICIES
 
@@ -151,6 +151,53 @@ class FreshBatchGuardTests(unittest.TestCase):
             batch["POSTGRES_PORT"] = "5438"
             with self.assertRaisesRegex(ValueError, "credentials"):
                 run_paid(GENERATED / "p33b-repeat.env", ["python", "-V"])
+        child.assert_not_called()
+
+    def test_live_batch_overrides_only_new_batch_and_local_service_settings(self):
+        batch = {"POSTGRES_PASSWORD": "new-db", "POSTGRES_PORT": "5436",
+                 "JWT_SECRET_KEY": "new-jwt", "DEMO_TRAVELER_1_PASSWORD": "one",
+                 "DEMO_TRAVELER_2_PASSWORD": "two", "PORT": "8015",
+                 "ORIGINS": "http://127.0.0.1:8015"}
+        old = {"POSTGRES_PASSWORD": "old-db", "JWT_SECRET_KEY": "old-jwt",
+               "AI_PROVIDER": "deepseek", "AI_MODEL": "deepseek-flash",
+               "AI_BASE_URL": "https://api.deepseek.com", "AI_API_KEY": "model",
+               "ALIYUN_IQS_API_KEY": "search"}
+        def values(path):
+            return batch if path.name == "p33b-next.env" else old
+
+        with patch("scripts.batch_environment.dotenv_values", side_effect=values), \
+                patch("scripts.batch_environment.subprocess.run") as child, \
+                patch.dict(os.environ, {"DATABASE_URL": "postgresql://old",
+                                     "POSTGRES_PORT": "5433", "JWT_SECRET_KEY": "old-jwt"}):
+            child.return_value.returncode = 0
+            self.assertEqual(run_live(GENERATED / "p33b-next.env", ["python", "main.py"]), 0)
+            actual = child.call_args.kwargs["env"]
+            self.assertEqual(actual["DATABASE_URL"], "")
+            self.assertEqual(actual["POSTGRES_PORT"], "5436")
+            self.assertEqual(actual["POSTGRES_PASSWORD"], "new-db")
+            self.assertEqual(actual["JWT_SECRET_KEY"], "new-jwt")
+            self.assertEqual(actual["HOST"], "127.0.0.1")
+            self.assertEqual(actual["PORT"], "8000")
+            self.assertEqual(actual["ORIGINS"],
+                             "http://127.0.0.1:8000,http://localhost:8000")
+            self.assertEqual(actual["ALIYUN_IQS_ENABLED"], "true")
+
+    def test_live_batch_rejects_old_port_or_shared_signing_key(self):
+        batch = {"POSTGRES_PASSWORD": "new-db", "POSTGRES_PORT": "5433",
+                 "JWT_SECRET_KEY": "new-jwt", "DEMO_TRAVELER_1_PASSWORD": "one",
+                 "DEMO_TRAVELER_2_PASSWORD": "two", "PORT": "8015",
+                 "ORIGINS": "http://127.0.0.1:8015"}
+        old = {"JWT_SECRET_KEY": "new-jwt", "AI_PROVIDER": "deepseek",
+               "AI_MODEL": "deepseek-flash", "AI_BASE_URL": "https://api.deepseek.com",
+               "AI_API_KEY": "model", "ALIYUN_IQS_API_KEY": "search"}
+        with patch("scripts.batch_environment.dotenv_values",
+                   side_effect=lambda path: batch if path.name == "p33b-next.env" else old), \
+                patch("scripts.batch_environment.subprocess.run") as child:
+            with self.assertRaisesRegex(ValueError, "5436"):
+                run_live(GENERATED / "p33b-next.env", ["python", "main.py"])
+            batch["POSTGRES_PORT"] = "5436"
+            with self.assertRaisesRegex(ValueError, "not isolated"):
+                run_live(GENERATED / "p33b-next.env", ["python", "main.py"])
         child.assert_not_called()
 
 

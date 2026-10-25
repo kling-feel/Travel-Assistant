@@ -83,6 +83,34 @@ def run_paid(path: Path, command: list[str]):
     return subprocess.run(command, env=environment, check=False).returncode
 
 
+def run_live(path: Path, command: list[str]):
+    """Run the reviewed 5436 batch on local port 8000 without editing old .env."""
+    if not command:
+        raise ValueError("Command is required after --")
+    values = dotenv_values(path)
+    if (path.name != "p33b-next.env" or set(values) != KEYS or
+            values.get("POSTGRES_PORT") != "5436" or
+            any(not value for value in values.values())):
+        raise ValueError("Live mode requires the isolated 5436 batch")
+    paid = dotenv_values(ROOT / ".env")
+    base = urlparse(paid.get("AI_BASE_URL") or "")
+    if (paid.get("AI_PROVIDER") != "deepseek" or not paid.get("AI_MODEL") or
+            base.scheme != "https" or base.hostname != "api.deepseek.com" or
+            base.username or base.password or base.query or base.fragment or
+            not paid.get("AI_API_KEY") or not paid.get("ALIYUN_IQS_API_KEY") or
+            not paid.get("JWT_SECRET_KEY") or
+            paid["JWT_SECRET_KEY"] == values["JWT_SECRET_KEY"]):
+        raise ValueError("Local service credentials are incomplete or not isolated")
+    environment = os.environ.copy()
+    environment.update(values)
+    environment.update({key: paid[key] for key in (
+        "AI_PROVIDER", "AI_MODEL", "AI_BASE_URL", "AI_API_KEY", "ALIYUN_IQS_API_KEY")})
+    environment.update({"DATABASE_URL": "", "HOST": "127.0.0.1", "PORT": "8000",
+                        "ORIGINS": "http://127.0.0.1:8000,http://localhost:8000",
+                        "ALIYUN_IQS_ENABLED": "true"})
+    return subprocess.run(command, env=environment, check=False).returncode
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_subparsers(dest="action", required=True)
@@ -96,6 +124,9 @@ def main():
     paid = actions.add_parser("run-paid")
     paid.add_argument("path")
     paid.add_argument("command", nargs=argparse.REMAINDER)
+    live = actions.add_parser("run-live")
+    live.add_argument("path")
+    live.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     try:
         path = checked_path(args.path)
@@ -106,6 +137,8 @@ def main():
         command = args.command[1:] if args.command[:1] == ["--"] else args.command
         if args.action == "run-paid":
             raise SystemExit(run_paid(path, command))
+        if args.action == "run-live":
+            raise SystemExit(run_live(path, command))
         raise SystemExit(run(path, command))
     except (OSError, ValueError) as error:
         parser.error(str(error))

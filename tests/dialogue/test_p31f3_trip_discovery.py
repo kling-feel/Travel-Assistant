@@ -73,7 +73,7 @@ class TripDiscoveryTests(unittest.TestCase):
 
     def test_offered_local_day_merges_airports_and_ignores_cancelled(self):
         with self.fixture.engine.connect() as db:
-            result = discover_destinations(db, "Shanghai", self.day, "nature")
+            result = discover_destinations(db, "Shanghai", self.day)
         self.assertIn("SIM-20", result["answer"])
         self.assertNotIn("SIM-21", result["answer"])
         self.assertNotIn("SIM-24", result["answer"])
@@ -83,10 +83,58 @@ class TripDiscoveryTests(unittest.TestCase):
                             if item["type"] == "flight"))
         self.assertTrue(any(item["type"] == "place" for item in result["references"]))
 
+    def test_preference_never_fills_remaining_slots_with_other_topics(self):
+        cities = ["Chengdu", "Beijing", "London", "Kunming"]
+        class NoLiveSearch:
+            def search(self, *_args):
+                return []
+
+        for count in range(4):
+            matching = set(cities[:count])
+            def reviewed(city, _country, _preference):
+                return ([{"id": f"{city}-nature", "name": f"{city} park",
+                          "display_name_zh": f"{city}公园", "intro": "已核查的自然地点",
+                          "url": "https://example.org/place", "reviewed_on": "2026-10-24"}]
+                        if city in matching else [])
+            with patch("travel_assistant.services.trip_discovery.places_for_city",
+                       side_effect=reviewed), self.fixture.engine.connect() as db:
+                result = discover_destinations(db, "Shanghai", self.day, "nature",
+                                               provider=NoLiveSearch())
+            self.assertEqual(len(result["options"]), count)
+            self.assertEqual({option["city"] for option in result["options"]}, matching)
+            self.assertEqual(len([ref for ref in result["references"]
+                                  if ref["type"] == "place"]), count)
+            if count == 0:
+                self.assertIn("有可售的模拟直达航班", result["answer"])
+                self.assertIn("没有近期核查", result["answer"])
+                self.assertNotIn("没有可预订的模拟直达班次", result["answer"])
+            else:
+                self.assertNotIn("暂无符合偏好", result["answer"])
+
+    def test_nature_scenery_excludes_indoor_nature_museums(self):
+        class NoLiveSearch:
+            def search(self, *_args):
+                return []
+
+        def reviewed(city, _country, _preference):
+            name = "Natural History Museum" if city == "Chengdu" else "Green Lake"
+            return [{"id": f"{city}-place", "name": name,
+                     "display_name_zh": "自然历史博物馆" if city == "Chengdu" else "翠湖",
+                     "intro": "已核查的地点", "url": "https://example.org/place",
+                     "reviewed_on": "2026-10-24"}]
+
+        with patch("travel_assistant.services.trip_discovery.places_for_city",
+                   side_effect=reviewed), self.fixture.engine.connect() as db:
+            result = discover_destinations(db, "Shanghai", self.day, "nature",
+                                           provider=NoLiveSearch())
+        self.assertNotIn("自然历史博物馆", result["answer"])
+        self.assertNotIn("Chengdu", {option["city"] for option in result["options"]})
+        self.assertTrue(result["options"])
+
     def test_combined_request_then_city_selection_then_booking_card(self):
         model = cases.ScriptedModel({"intent": "general", "params": {}, "answer": "好的，我记下了。"},
                                     {"intent": "transaction", "params": {"actions": [
-            {"action_type": "flight_book", "parameters": {"flight_id": 20}}]}, "answer": ""})
+            {"action_type": "flight_book", "parameters": {"flight_id": 25}}]}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
         with model_patch, saver_patch, client:
             auth = self.fixture.auth(client, "demo1", "password1")
@@ -96,16 +144,15 @@ class TripDiscoveryTests(unittest.TestCase):
             discovery = self.fixture.turn(client, sid, auth, "f3-discovery-002",
                                           "明天想去风景好的地方，最好坐飞机，帮我订机票")
             self.assertEqual(discovery.status_code, 200, discovery.text)
-            self.assertIn("成都", discovery.json()["answer"])
+            self.assertIn("昆明", discovery.json()["answer"])
             self.assertEqual(discovery.json()["actions"], [])
-            chosen = self.fixture.turn(client, sid, auth, "f3-city-003", "我选成都")
+            chosen = self.fixture.turn(client, sid, auth, "f3-city-003", "我选昆明")
             self.assertEqual(chosen.status_code, 200, chosen.text)
-            self.assertIn("SIM-20", chosen.json()["answer"])
-            self.assertIn("SIM-21", chosen.json()["answer"])
-            booked = self.fixture.turn(client, sid, auth, "f3-book-004", "帮我预订航班 SIM-20")
+            self.assertIn("SIM-25", chosen.json()["answer"])
+            booked = self.fixture.turn(client, sid, auth, "f3-book-004", "帮我预订航班 SIM-25")
             self.assertEqual(booked.status_code, 200, booked.text)
             self.assertEqual(len(booked.json()["actions"]), 1, booked.json()["answer"])
-            self.assertEqual(booked.json()["actions"][0]["parameters"]["flight_id"], 20)
+            self.assertEqual(booked.json()["actions"][0]["parameters"]["flight_id"], 25)
             with self.fixture.engine.connect() as db:
                 self.assertEqual(db.execute(select(flight_orders.c.id).where(
                     flight_orders.c.traveler_id == "t1", flight_orders.c.status == "confirmed"
@@ -121,7 +168,7 @@ class TripDiscoveryTests(unittest.TestCase):
                                       "明天想找能坐飞机去的风景好的地方")
             self.assertIn("出发", first.json()["answer"])
             second = self.fixture.turn(client, sid, auth, "f3-missing-2", "我在上海")
-            self.assertIn("成都", second.json()["answer"])
+            self.assertIn("昆明", second.json()["answer"])
             another = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             third = self.fixture.turn(client, another, auth, "f3-missing-date-003",
                                       "我在上海，推荐能坐飞机去的风景好的地方")
@@ -156,7 +203,11 @@ class TripDiscoveryTests(unittest.TestCase):
         def forbidden_weather(_city, _day):
             self.fail("overseas weather must not use China-only verification")
 
-        with self.fixture.engine.connect() as db:
+        london_place = {"id": "london-park", "name": "London park",
+                        "display_name_zh": "伦敦公园", "intro": "已核查的自然地点",
+                        "url": "https://example.org/place", "reviewed_on": "2026-10-24"}
+        with patch("travel_assistant.services.trip_discovery.places_for_city",
+                   return_value=[london_place]), self.fixture.engine.connect() as db:
             result = discover_destinations(db, "Shanghai", self.day, "nature",
                                            weather_lookup=forbidden_weather)
             empty = discover_destinations(db, "Shanghai", self.day + timedelta(days=1),
