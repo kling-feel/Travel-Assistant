@@ -11,6 +11,15 @@ from travel_assistant.services.dialogue_context import read_request, requested_a
 from tests.dialogue import test_p26a_dialogue as dialogue_cases
 
 
+class _FixedActionClock(datetime):
+    """Keep the 2026-10-25 booking fixture in its test-time future."""
+
+    @classmethod
+    def now(cls, tz=None):
+        value = datetime(2026, 10, 21, 4, tzinfo=timezone.utc)
+        return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+
+
 class TransactionJourneyTests(unittest.TestCase):
     def setUp(self):
         self.fixture = dialogue_cases.DialogueTests("runTest")
@@ -69,8 +78,10 @@ class TransactionJourneyTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""},
             {"intent": "general", "params": {}, "answer": ""})
         client, model_patch, saver_patch = self.fixture.client(model)
-        with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
-                                            return_value=date(2026, 10, 21)), client:
+        with (model_patch, saver_patch,
+              patch("travel_assistant.agents.controlled.local_today",
+                    return_value=date(2026, 10, 21)),
+              patch("travel_assistant.services.actions.datetime", _FixedActionClock), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             found = self.fixture.turn(client, sid, auth, "flight-search-001",

@@ -128,8 +128,11 @@ class AnswerComposerTests(unittest.TestCase):
                 {"intent": "general", "params": {}, "answer": ""},
                 {"intent": "general", "params": {}, "answer": ""})
             client, model_patch, saver_patch = case.fixture.client(model)
-            with model_patch, saver_patch, patch("travel_assistant.agents.controlled.local_today",
-                                                return_value=date(2026, 10, 21)), client:
+            with (model_patch, saver_patch,
+                  patch("travel_assistant.agents.controlled.local_today",
+                        return_value=date(2026, 10, 21)),
+                  patch("travel_assistant.services.actions.datetime",
+                        journey_cases._FixedActionClock), client):
                 auth = case.fixture.auth(client, "demo1", "password1")
                 sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
                 found = case.fixture.turn(client, sid, auth, "compose-search-1",

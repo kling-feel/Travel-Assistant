@@ -142,7 +142,8 @@ class LocationJourneyTests(unittest.TestCase):
                 "action_type": "flight_book", "parameters": {"flight_id": 3831}}]},
              "answer": ""})
         client, patches = self._start(model)
-        with patches[0], patches[1], patches[2], patches[3], client:
+        with (patches[0], patches[1], patches[2], patches[3],
+              patch("travel_assistant.services.actions.datetime", earlier._FixedActionClock), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             self.fixture.turn(client, sid, auth, "landing-card-01",
@@ -275,7 +276,8 @@ class LocationJourneyTests(unittest.TestCase):
             {"intent": "general", "params": {}, "answer": ""},
             {"intent": "general", "params": {}, "answer": ""})
         client, patches = self._start(model)
-        with patches[0], patches[1], patches[2], patches[3], client:
+        with (patches[0], patches[1], patches[2], patches[3],
+              patch("travel_assistant.services.actions.datetime", earlier._FixedActionClock), client):
             auth = self.fixture.auth(client, "demo1", "password1")
             sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
             self.fixture.turn(client, sid, auth, "mixed-01",

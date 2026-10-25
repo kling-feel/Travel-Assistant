@@ -56,6 +56,7 @@ class CountryBookingTests(unittest.TestCase):
         with (model_patch, saver_patch,
               patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
               patch("travel_assistant.services.country_flights._utc_now", return_value=NOW),
+              patch("travel_assistant.services.actions.datetime", earliest_cases._FixedActionClock),
               patch("travel_assistant.services.agent_reads.find_earliest_flights",
                     side_effect=lambda db, deps, arrs, **kwargs: original_search(
                         db, deps, arrs, now=NOW, **kwargs)), client):
