@@ -72,7 +72,7 @@ services:
 """)
     with CADDY.open("x", encoding="utf-8") as output:
         output.write((ROOT / "deploy/Caddyfile").read_text(encoding="utf-8")
-                     .replace("{$PUBLIC_HOST} {", "{$PUBLIC_HOST} {\n\ttls internal", 1))
+                     .replace("{$PUBLIC_HOST} {", "{$PUBLIC_HOST} {\n\ttls internal"))
     print("Created isolated 2 GiB capacity configuration with unusable provider keys")
 
 

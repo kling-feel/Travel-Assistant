@@ -16,3 +16,7 @@
 		X-Frame-Options "DENY"
 	}
 }
+
+www.{$PUBLIC_HOST} {
+	redir https://{$PUBLIC_HOST}{uri} permanent
+}
