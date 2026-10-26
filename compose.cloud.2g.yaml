@@ -1,0 +1,20 @@
+# Resource limits for a small 2 GiB cloud host. Use with compose.cloud.yaml.
+# Run build, initialization, account management, and restore one at a time.
+services:
+  db:
+    mem_limit: 640m
+    cpus: 0.75
+  backup:
+    mem_limit: 256m
+  init:
+    mem_limit: 768m
+    cpus: 1.0
+  app:
+    mem_limit: 768m
+    cpus: 1.0
+  account-admin:
+    mem_limit: 768m
+    cpus: 1.0
+  proxy:
+    mem_limit: 128m
+    cpus: 0.1
