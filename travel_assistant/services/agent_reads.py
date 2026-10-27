@@ -167,8 +167,9 @@ def read_for_assistant(db, traveler_id, intent, params):
         rows = itinerary(db, traveler_id)
         question = _as_text(params.get("_user_text"), 4000) or ""
         current_city = _as_text(params.get("_current_city"))
-        historical = any(word in question for word in ("历史", "取消过", "取消记录", "已取消的",
+        historical = (any(word in question for word in ("历史", "取消过", "取消记录", "已取消的",
                                                         "以前的订单", "过去的订单"))
+                      or bool(re.search(r"(?:之前|以前|过去|曾经).{0,10}取消", question)))
         if not historical and (any(word in question for word in ("现在", "还有", "要出发", "出发吗",
                                                       "最近", "近期", "接下来", "未来"))
                                or re.search(r"(?:明天|后天).{0,12}出发|怎么安排出发", question)):

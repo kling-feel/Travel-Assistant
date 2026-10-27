@@ -525,10 +525,16 @@ def _process_turn_inner(session_id, data, traveler_id, session, progress=None):
         if plans:
             try:
                 explicit_actions = requested_actions(content)
-                if explicit_actions and any(
-                        not isinstance(plan, dict) or
-                        plan.get("action_type") not in explicit_actions
-                        for plan in plans):
+                read_only_request = bool(re.search(
+                    r"不(?:要|想|用)?(?:预订|预定|订票|订房|订车|下单|购买|买票|取消)|"
+                    r"(?:之前|以前|过去|曾经).{0,10}取消|"
+                    r"取消.{0,20}(?:有哪些|是什么|记录|历史)", content))
+                if not mass_cancel and (
+                        read_only_request or
+                        explicit_actions and any(
+                            not isinstance(plan, dict) or
+                            plan.get("action_type") not in explicit_actions
+                            for plan in plans)):
                     raise SelectionNeeded("本轮订单业务与旅客明确要求不一致，请重新核对对象。")
                 lock_processing_turn(session, traveler_id, session_id, turn["id"])
                 candidates = result.get("candidates") or {}

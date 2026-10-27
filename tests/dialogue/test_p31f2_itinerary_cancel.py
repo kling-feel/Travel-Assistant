@@ -11,6 +11,7 @@ from travel_assistant.db.travel_models import (airports, flight_orders, flights,
                               rental_orders, rental_products)
 from travel_assistant.services.agent_reads import read_for_assistant
 from travel_assistant.services.agent_feedback import bulk_cancellation_requested, cancellation_overview
+from travel_assistant.services.dialogue_context import requested_actions
 from travel_assistant.services.order_targeting import matching_orders
 from travel_assistant.services.policy_catalog import CURRENT_POLICIES
 from travel_assistant.services.location_labels import airport_zh
@@ -115,6 +116,8 @@ class ItineraryCancelTests(unittest.TestCase):
             self.assertNotIn("basel-flight", history["answer"])
             self.assertIn("cancelled-flight", read_for_assistant(
                 db, "t1", "itinerary", {"_user_text": "查看取消历史"})["answer"])
+            self.assertIn("cancelled-flight", read_for_assistant(
+                db, "t1", "itinerary", {"_user_text": "我之前取消的机票和酒店有哪些？"})["answer"])
         client, model_patch, saver_patch = self.fixture.client(cases.ScriptedModel())
         with model_patch, saver_patch, client:
             one = self.fixture.auth(client, "demo1", "password1")
@@ -122,6 +125,19 @@ class ItineraryCancelTests(unittest.TestCase):
             self.assertEqual(len(client.get("/api/v1/me/itinerary", headers=one).json()["flight_orders"]), 3)
             self.assertEqual([row["id"] for row in client.get(
                 "/api/v1/me/itinerary", headers=two).json()["flight_orders"]], ["other-flight"])
+
+    def test_past_cancellations_are_a_read_only_question(self):
+        self.assertEqual(requested_actions("我之前取消的机票和酒店有哪些？"), [])
+        client, model_patch, saver_patch = self.fixture.client(cases.ScriptedModel())
+        with model_patch, saver_patch, client:
+            auth = self.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            response = self.fixture.turn(client, sid, auth, "history-only-001",
+                                         "我之前取消的机票和酒店有哪些？")
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["actions"], [])
+            self.assertIn("cancelled-flight", response.json()["answer"])
+            self.assertNotIn("basel-flight", response.json()["answer"])
 
     def test_departure_attribute_and_multiple_match(self):
         with self.fixture.engine.connect() as db:

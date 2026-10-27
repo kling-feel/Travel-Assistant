@@ -16,6 +16,22 @@ from tests.dialogue.test_p31e2a_earliest import EarliestJourneyTests, NOW, _Fixe
 
 
 class WorkMemoryTests(unittest.TestCase):
+    def test_travel_plan_and_destination_change_do_not_reuse_old_flight(self):
+        model = ScriptedModel()
+        client, model_patch, saver_patch, clock_patch, api_clock_patch, action_clock_patch, search_patch = self._test_context(model)
+        with model_patch, saver_patch, clock_patch, api_clock_patch, action_clock_patch, search_patch, client:
+            auth = self.fixture.fixture.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            intro = self._turn(client, sid, auth, 80, "你好，我在上海，打算去伦敦旅行。")
+            self.assertIn("计划去伦敦", intro["answer"])
+            self.assertEqual(intro["actions"], [])
+            changed = self._turn(client, sid, auth, 81,
+                                 "我改主意想去巴塞尔，刚才伦敦那班还能直接给我订吗？")
+            self.assertIn("目的地改为巴塞尔", changed["answer"])
+            self.assertIn("不能用于新目的地", changed["answer"])
+            self.assertEqual(changed["actions"], [])
+            self.assertEqual(model.history_lengths, [])
+
     def test_old_candidate_scope_expires(self):
         task = {"departure": "Shanghai", "arrival": "London",
                 "travel_date": "2026-10-25"}

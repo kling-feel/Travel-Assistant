@@ -62,6 +62,7 @@ class TurnState(TypedDict, total=False):
     intent: str
     params: dict
     draft: str
+    grounded_notice: bool
     answer: str
     references: list[dict]
     transaction_plan: list[dict]
@@ -198,7 +199,8 @@ def build_graph(model, read_evidence, checkpointer):
         if claimed and country_task.get("origin") not in (None, claimed):
             tasks.pop("country_flight_search", None)
         return {"location_context": location, "task_contexts": tasks,
-                "nearby_city": None, "nearby_source": None}
+                "nearby_city": None, "nearby_source": None,
+                "grounded_notice": False}
 
     def route(state: TurnState):
         history = state["history"][-10:]
@@ -221,6 +223,69 @@ def build_graph(model, read_evidence, checkpointer):
             task_seed = prior_context
         direct_intent, direct_params, direct_context = read_request(
             user_text, "general", {}, task_seed, base)
+        hotel_landing = tasks.get("hotel_search") or {}
+        if (direct_intent == "rental_search"
+                and re.search(r"机场.{0,6}(?:附近|周边)|(?:附近|周边).{0,6}机场", user_text)
+                and hotel_landing.get("_landing_flight_id")
+                and direct_params.get("city") == hotel_landing.get("city")
+                and not direct_params.get("airport")):
+            landing_airport = hotel_landing.get("airport")
+            landing_date = hotel_landing.get("suggested_check_in")
+            pickup_date = direct_params.get("pickup_date")
+            if (landing_date and pickup_date and pickup_date < landing_date
+                    and location.get("current_city") != hotel_landing.get("city")
+                    and not re.search(r"提前到了|已经到了|早就到了|之前就到了", user_text)):
+                return {"intent": "general", "params": {},
+                        "grounded_notice": True,
+                        "draft": f"你前面选择的航班预计在{landing_date}抵达"
+                                 f"{city_zh(hotel_landing['city'])}，但这次取车日期是{pickup_date}，"
+                                 "早于落地日期。请核对取车日期；如果你会提前自行抵达，"
+                                 "请明确告诉我，再查询机场周边车辆。"}
+            if landing_airport:
+                direct_params["airport"] = landing_airport
+                direct_context["airport"] = landing_airport
+        cities_in_turn = mentioned_cities(user_text)
+        current_city = declared_current_city(user_text)
+        if (not writes and current_city and len(cities_in_turn) >= 2
+                and re.search(r"打算|计划|准备|想", user_text)
+                and re.search(r"旅游|旅行", user_text)
+                and not re.search(r"景点|经典地点|推荐|航班|机票|酒店|租车", user_text)):
+            destination = next((city for city in cities_in_turn
+                                if city != current_city), None)
+            if destination:
+                task = {"intent": "flight_search", "departure": current_city,
+                        "arrival": destination,
+                        "_sources": {"departure": "user", "arrival": "user"}}
+                tasks["flight_search"] = task
+                return {"intent": "general", "params": {}, "context": task,
+                        "task_contexts": tasks,
+                        "draft": f"已记下你目前在{city_zh(current_city)}，计划去{city_zh(destination)}旅行。"
+                                 "如果需要查机票，请告诉我出行日期；也可以说想了解当地景点、住宿或行程建议。"}
+        changed_destination = re.search(r"改主意(?:想|要)?去|改去|换成去", user_text)
+        if (not writes and changed_destination and flight_task
+                and re.search(r"刚才|之前|前面", user_text)):
+            new_city = next((city for city in mentioned_cities(
+                user_text[changed_destination.end():changed_destination.end() + 20])
+                if city != flight_task.get("arrival")), None)
+            if new_city:
+                task = {"intent": "flight_search", "departure": flight_task.get("departure"),
+                        "arrival": new_city,
+                        "_sources": {"departure": "user", "arrival": "user"}}
+                tasks["flight_search"] = task
+                return {"intent": "general", "params": {}, "context": task,
+                        "task_contexts": tasks,
+                        "draft": f"已把目的地改为{city_zh(new_city)}。刚才去{city_zh(flight_task.get('arrival'))}的"
+                                 "航班不能用于新目的地，也不会直接生成订单。请告诉我新出行日期，"
+                                 "我会重新查询可售班次。"}
+        if (writes == ["flight_book"]
+                and re.search(r"(?:看|看看|展示|说明).{0,8}(?:确认内容|确认卡|待确认卡)", user_text)
+                and not re.search(r"SIM-\d+|\d{1,2}月\d{1,2}日|明天|后天|从.{0,12}到", user_text)):
+            pending = [card for card in read_evidence("memory_cards", {}).get("cards", [])
+                       if card.get("status") == "pending"
+                       and card.get("action_type") == "flight_book"]
+            if len(pending) == 1:
+                return {"intent": "action_guidance", "params": {"mode": "approve"},
+                        "draft": ""}
         if bulk_cancellation_requested(user_text):
             # The API resolves these orders from the database after graph routing.
             return {"intent": "general", "params": {}, "draft": "我会先核对本人订单和取消范围。"}
@@ -496,8 +561,7 @@ def build_graph(model, read_evidence, checkpointer):
         if direct_intent == "flight_search" and direct_params.get("sort") == "earliest":
             tasks = dict(state.get("task_contexts") or {})
             tasks["flight_search"] = direct_context
-            book_earliest = bool(re.search(
-                r"预订|预定|下单|订票|订.{0,8}最早|买票|买.{0,8}机票", user_text))
+            book_earliest = "flight_book" in writes
             if book_earliest:
                 return {"intent": "transaction", "params": {
                     "actions": [{"action_type": "flight_book", "parameters": {}}],
@@ -511,7 +575,7 @@ def build_graph(model, read_evidence, checkpointer):
             tasks[direct_intent] = direct_context
             book = bool(re.search(
                 r"预订|预定|下单|订房|订车|订.{0,8}(?:最贵|最便宜)|我要住|我想住|租.{0,8}车",
-                user_text))
+                user_text) or re.search(r"(?:生成|给我|看).{0,10}(?:待确认卡|确认卡)", user_text))
             if book:
                 kind = direct_intent.split("_")[0]
                 return {"intent": "transaction", "params": {
@@ -530,7 +594,7 @@ def build_graph(model, read_evidence, checkpointer):
         if not writes and direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
             return {"intent": direct_intent, "params": direct_params,
                     "context": direct_context, "draft": ""}
-        if re.search(r"历史订单|订单历史|行程历史|历史行程|取消过|取消记录|取消历史|已取消的", user_text) and not writes:
+        if re.search(r"历史订单|订单历史|行程历史|历史行程|取消过|取消记录|取消历史|已取消的|(?:之前|以前|过去|曾经).{0,10}取消", user_text) and not writes:
             return {"intent": "itinerary", "params": {},
                     "context": prior_context, "draft": ""}
         if (re.search(r"(?:现在|还有|最近|近期|接下来|未来).{0,12}(?:行程|安排|机票|航班|出发)|"
@@ -681,7 +745,9 @@ def build_graph(model, read_evidence, checkpointer):
             return {"answer": (f"当前旅行助手使用 {provider}{detail}。"
                                "这是服务配置标识，不能单凭它核实实际运行的底层精确版本。"),
                     "references": []}
-        return {"answer": _safe_general(state.get("draft")), "references": []}
+        draft = state.get("draft")
+        return {"answer": draft if state.get("grounded_notice") else _safe_general(draft),
+                "references": []}
 
     def memory(state: TurnState):
         """Recap only bounded user-stated task fields and current card status."""

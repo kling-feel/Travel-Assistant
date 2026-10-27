@@ -34,6 +34,34 @@ class _FixedReadClock(_FixedActionClock, metaclass=_DatetimeInstanceMeta):
 
 
 class EarliestJourneyTests(unittest.TestCase):
+    def test_do_not_order_remains_read_only(self):
+        self.assertEqual(requested_actions("帮我找那天最早的可售航班，先不要下单。"), [])
+        self.assertEqual(requested_actions("不要购买这班机票，先给我看时间。"), [])
+        self.assertEqual(requested_actions("就预订最早那班"), ["flight_book"])
+
+    def test_earliest_search_with_no_order_instruction_creates_no_card(self):
+        model = dialogue_cases.ScriptedModel(
+            {"intent": "flight_search", "params": {}, "answer": ""})
+        client, model_patch, saver_patch = self.fixture.fixture.client(model)
+        original = find_earliest_flights
+        with (model_patch, saver_patch,
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.services.agent_reads.find_earliest_flights",
+                    side_effect=lambda db, deps, arrs, **kwargs: original(
+                        db, deps, arrs, now=NOW, **kwargs)), client):
+            auth = self.fixture.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            self.fixture.fixture.turn(client, sid, auth, "no-book-1",
+                                      "查10月25日从上海到伦敦的航班")
+            result = self.fixture.fixture.turn(client, sid, auth, "no-book-2",
+                                               "帮我找那天最早的可售航班，先不要下单。")
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.json()["actions"], [])
+            self.assertIn("SIM-3832", result.json()["answer"])
+        with self.engine.connect() as db:
+            self.assertEqual(db.execute(select(pending_actions.c.id)).all(), [])
+
     def setUp(self):
         self.fixture = prior_cases.TransactionJourneyTests("runTest")
         self.fixture.setUp()
@@ -149,6 +177,11 @@ class EarliestJourneyTests(unittest.TestCase):
             self.assertEqual(len(booked.json()["actions"]), 1)
             card = booked.json()["actions"][0]
             self.assertEqual(card["parameters"]["flight_id"], 3832)
+            view = self.fixture.fixture.turn(client, sid, auth, "e2a-turn-card-view",
+                                             "我想订这班机票，先给我看确认内容")
+            self.assertEqual(view.status_code, 200, view.text)
+            self.assertEqual(view.json()["actions"], [])
+            self.assertIn(card["id"], view.json()["answer"])
             repeated = self.fixture.fixture.turn(client, sid, auth, "e2a-turn-4",
                                                  "就预订最早那班")
             self.assertEqual(repeated.status_code, 200, repeated.text)

@@ -216,6 +216,27 @@ class StayPriceRentalTests(unittest.TestCase):
         with self.fixture.engine.connect() as db:
             self.assertEqual(db.execute(select(hotel_orders.c.id)).all(), [])
 
+    def test_ranked_hotel_explicit_card_request(self):
+        model = dialogue_cases.ScriptedModel({"intent": "general", "params": {}, "answer": ""})
+        client, model_patch, saver_patch = self.fixture.client(model)
+        with (model_patch, saver_patch,
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.services.actions._hotel_today", return_value=date(2026, 10, 21)), client):
+            auth = self.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            found = self.fixture.turn(client, sid, auth, "hotel-card-1",
+                                      "查上海明天入住、住两晚的酒店")
+            self.assertEqual(found.status_code, 200, found.text)
+            proposed = self.fixture.turn(client, sid, auth, "hotel-card-2",
+                                         "我选最便宜那间，给我生成待确认卡")
+            self.assertEqual(proposed.status_code, 200, proposed.text)
+            self.assertEqual(len(proposed.json()["actions"]), 1)
+            self.assertEqual(proposed.json()["actions"][0]["parameters"]["product_id"],
+                             "room-SHA-10")
+        with self.fixture.engine.connect() as db:
+            self.assertEqual(db.execute(select(hotel_orders.c.id)).all(), [])
+
     def test_global_max_rental_requires_explicit_times(self):
         model = dialogue_cases.ScriptedModel(
             {"intent": "general", "params": {}, "answer": ""})
