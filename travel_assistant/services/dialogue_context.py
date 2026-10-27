@@ -13,26 +13,58 @@ _OFFSETS = {"今天": 0, "明天": 1, "后天": 2, "大后天": 3}
 _ABSOLUTE = re.compile(r"(?<!\d)(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?")
 _MONTH_DAY = re.compile(r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日")
 _WRITE = re.compile(r"预订|预定|下单|订票|订.{0,10}(?:机票|航班|酒店|房|车)|购买|买票|改签|改期|改到|改成|取消")
+_NEGATED_WRITE = re.compile(
+    r"(?:先|暂时|目前|现在)?\s*(?:别|不要|不用|不想|不必|无需|暂不|先不)"
+    r"\s*(?:帮我|替我|给我)?\s*(?:急着|马上|直接|先)?\s*"
+    r"(?:下单|预订|预定|订票|订房|订车|订.{0,8}(?:机票|航班|酒店|房|车|班)|订|"
+    r"购买|买票|取消|改签|改期|确认)"
+)
+_ONLY_READ = re.compile(
+    r"(?:只|先)(?:想|要)?(?:查|看|了解|问|告诉我|说明|核对|介绍)"
+    r".{0,24}(?:价|时间|时刻|日期|候选|班次|信息|政策|规则|明细)"
+)
+_HISTORY_READ = re.compile(
+    r"(?:之前|以前|过去|曾经).{0,10}取消|"
+    r"取消.{0,20}(?:有哪些|是什么|记录|历史)|"
+    r"取消过|取消记录|取消历史|已取消|历史订单|订单历史|历史行程|行程历史"
+)
 _NUMBER = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6,
            "七": 7, "八": 8, "九": 9, "十": 10}
 _NIGHTS = re.compile(r"(?:住|订|预订|预定)?\s*([一二两三四五六七八九十\d]{1,2})\s*晚")
 _CLOCK = re.compile(r"(凌晨|早上|上午|中午|下午|晚上)?\s*(\d{1,2})\s*(?:[:：]\s*(\d{2})|点\s*(半|\d{1,2}分?)?)")
 
 
+def _action_segments(text: str) -> list[str]:
+    return re.split(r"[，,；;。.!！？?]|并且|同时|顺便|然后|再|但|不过|"
+                    r"和(?=订|预订|预定|取消|改期|改签|改到|改成)", text)
+
+
+def is_read_only_action_request(text: str) -> bool:
+    """An explicit read/negation cannot authorize a model-proposed write."""
+    segments = _action_segments(text)
+    positive_write = any(_WRITE.search(segment) and not _NEGATED_WRITE.search(segment)
+                         and not _HISTORY_READ.search(segment)
+                         for segment in segments)
+    return not positive_write and any(
+        _NEGATED_WRITE.search(segment) or _ONLY_READ.search(segment)
+        or _HISTORY_READ.search(segment) for segment in segments)
+
+
 def requested_actions(text: str) -> list[str]:
     """Recognize explicit writes without treating policy questions as orders."""
-    if (not _WRITE.search(text) or re.search(r"政策|规则|条款|手续费|怎么|如何|取消过|取消记录|取消历史|已取消|历史订单|订单历史|历史行程|行程历史", text)
-            or re.search(r"(?:之前|以前|过去|曾经).{0,10}取消|取消.{0,20}(?:有哪些|是什么|记录|历史)", text)
+    if (not _WRITE.search(text) or re.search(r"政策|规则|条款|手续费|怎么|如何", text)
             or re.search(r"(?:取消|改签|改期).{0,18}(?:多少|几成|几元|费用|收费)", text)
-            or re.search(r"不(?:要|想|用)?(?:预订|预定|订票|订房|订车|下单|购买|买票|取消)", text)
+            or is_read_only_action_request(text)
             or re.search(r"(?:能|可以).{0,12}(?:取消|改期|改签).{0,2}吗", text)):
         return []
     domains = [("flight", r"机票|航班|班机|班次|订票|(?:最早|最便宜|那|这|前面|刚才).{0,4}班"),
                ("hotel", r"酒店|房间|房型|住宿|订房"),
                ("rental", r"租车|车辆|车子|辆车|台车|订车|取车|还车|rental-[A-Za-z0-9-]+")]
     actions = []
-    segments = re.split(r"[，,；;]|并且|同时|顺便|然后|再|和(?=订|预订|预定|取消|改期|改签|改到|改成)", text)
+    segments = _action_segments(text)
     for segment in segments:
+        if _NEGATED_WRITE.search(segment) or _HISTORY_READ.search(segment):
+            continue
         for kind, noun in domains:
             if not re.search(noun, segment):
                 continue
@@ -176,7 +208,10 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
             places = [place for place in places if place not in discarded]
     direct_route = bool(re.search(r"(?:从|由).{1,35}(?:到|去|飞往).{1,35}", text)) and len(places) >= 2
     weather = bool(re.search(r"天气|气温|降雨|下雨|晴天", text))
-    capability = bool(re.search(r"联网|实时查询|能上网|能搜索", text)) and not weather
+    capability = bool(re.search(
+        r"(?:你|助手).{0,8}(?:能|可以|会|有没有).{0,8}(?:联网|实时查询|搜索)|"
+        r"(?:有|支持).{0,8}(?:联网|实时查询|搜索).{0,4}(?:功能|吗)|"
+        r"(?:能否|可否|能不能).{0,4}(?:联网|实时查询|搜索)", text)) and not weather
     hotel_coverage = bool(re.search(r"(?:哪[个些边]|哪些).{0,12}机场.{0,8}酒店|机场.{0,8}(?:有|附近).{0,5}酒店", text))
     hotel = bool(re.search(r"酒店|住宿|住哪|订房", text))
     nights = stay_nights(text, dates)

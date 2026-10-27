@@ -341,6 +341,7 @@ def read_for_assistant(db, traveler_id, intent, params):
                 f"{_airport(db, row['departure_airport'])[0]} → {_airport(db, row['arrival_airport'])[0]}，"
                 f"航班 {row['flight_no']}（候选 {row['id']}，"
                 f"当地出发 {_local_time(row['departure_at'], _airport(db, row['departure_airport'])[1])}，"
+                f"当地到达 {_local_time(row['arrival_at'], _airport(db, row['arrival_airport'])[1])}，"
                 f"参考报价 {amount_zh(row['demo_fare_amount'])}）" for row in rows),
                     "references": references,
                     "earliest_id": rows[0]["id"] if ties == 1 else None,
@@ -390,6 +391,7 @@ def read_for_assistant(db, traveler_id, intent, params):
                 f"{_airport(db, row['departure_airport'])[0]} → {_airport(db, row['arrival_airport'])[0]}，"
                 f"航班 {row['flight_no']}（候选 {row['id']}，"
                 f"当地出发 {_local_time(row['departure_at'], _airport(db, row['departure_airport'])[1])}，"
+                f"当地到达 {_local_time(row['arrival_at'], _airport(db, row['arrival_airport'])[1])}，"
                 f"参考报价 {amount_zh(row['demo_fare_amount'])}）" for row in rows),
             [{"type": "flight", "id": row["id"], "offer_version": row["offer_version"],
               "price": row["demo_fare_amount"], "travel_date": travel_date.isoformat(),

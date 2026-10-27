@@ -33,7 +33,8 @@ from travel_assistant.services.actions import (ActionError, ActionNotFound, crea
                               get_proposal, list_proposals)
 from travel_assistant.services.confirmations import confirm_action, reject_action, list_action_history
 from travel_assistant.services.agent_reads import demo_date, read_action_guidance, read_for_assistant
-from travel_assistant.services.dialogue_context import local_today, requested_actions
+from travel_assistant.services.dialogue_context import (is_read_only_action_request,
+                                                        local_today, requested_actions)
 from travel_assistant.services.chat_turns import (TurnConflict, _public as public_turn, begin_turn,
                                  fail_turn, finish_turn, get_turn, latest_turn, has_graph_turns,
                                  lock_processing_turn)
@@ -525,10 +526,7 @@ def _process_turn_inner(session_id, data, traveler_id, session, progress=None):
         if plans:
             try:
                 explicit_actions = requested_actions(content)
-                read_only_request = bool(re.search(
-                    r"不(?:要|想|用)?(?:预订|预定|订票|订房|订车|下单|购买|买票|取消)|"
-                    r"(?:之前|以前|过去|曾经).{0,10}取消|"
-                    r"取消.{0,20}(?:有哪些|是什么|记录|历史)", content))
+                read_only_request = is_read_only_action_request(content)
                 if not mass_cancel and (
                         read_only_request or
                         explicit_actions and any(

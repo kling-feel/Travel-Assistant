@@ -12,7 +12,8 @@ from langgraph.graph import END, START, StateGraph
 from travel_assistant.services.agent_feedback import bulk_cancellation_requested
 from travel_assistant.services.dialogue_boundaries import boundary_intent
 from travel_assistant.services.country_flights import country_in_text
-from travel_assistant.services.dialogue_context import (declared_current_city, flight_followup, local_today,
+from travel_assistant.services.dialogue_context import (declared_current_city, flight_followup,
+                                       is_read_only_action_request, local_today,
                                        mentioned_cities, mentioned_dates,
                                        read_request, requested_actions,
                                        stay_nights)
@@ -213,6 +214,20 @@ def build_graph(model, read_evidence, checkpointer):
         location = state.get("location_context") or {}
         base = local_today()
         writes = requested_actions(user_text)
+        if is_read_only_action_request(user_text):
+            # A later "don't book" overrides an earlier booking goal, while
+            # retaining the route and dates for a read-only follow-up.
+            for name, task in list(tasks.items()):
+                if not isinstance(task, dict):
+                    continue
+                if name == "flight_search" and task.get("_goal") == "book":
+                    tasks[name] = {**task, "_goal": "explore"}
+                elif task.get("goal") == "book":
+                    tasks[name] = {**task, "goal": "explore"}
+            if isinstance(prior_context, dict) and prior_context.get("_goal") == "book":
+                prior_context = {**prior_context, "_goal": "explore"}
+            flight_task = tasks.get("flight_search") or {}
+            country_task = tasks.get("country_flight_search") or {}
         if re.search(r"租车|取车|还车|车辆|辆车|台车|订车", user_text):
             task_seed = tasks.get("rental_search") or prior_context
         elif re.search(r"酒店|住宿|房间|房型|订房|住两晚", user_text):
@@ -223,6 +238,13 @@ def build_graph(model, read_evidence, checkpointer):
             task_seed = prior_context
         direct_intent, direct_params, direct_context = read_request(
             user_text, "general", {}, task_seed, base)
+        if (not writes and re.search(
+                r"历史订单|订单历史|行程历史|历史行程|取消过|取消记录|取消历史|"
+                r"已取消的|(?:之前|以前|过去|曾经).{0,10}取消", user_text)):
+            # Explicit history questions take priority over a saved earliest
+            # flight search, which otherwise replays the previous candidates.
+            return {"intent": "itinerary", "params": {},
+                    "context": prior_context, "draft": ""}
         hotel_landing = tasks.get("hotel_search") or {}
         if (direct_intent == "rental_search"
                 and re.search(r"机场.{0,6}(?:附近|周边)|(?:附近|周边).{0,6}机场", user_text)
@@ -594,9 +616,6 @@ def build_graph(model, read_evidence, checkpointer):
         if not writes and direct_intent in ("weather", "capabilities", "hotel_coverage", "multi_read"):
             return {"intent": direct_intent, "params": direct_params,
                     "context": direct_context, "draft": ""}
-        if re.search(r"历史订单|订单历史|行程历史|历史行程|取消过|取消记录|取消历史|已取消的|(?:之前|以前|过去|曾经).{0,10}取消", user_text) and not writes:
-            return {"intent": "itinerary", "params": {},
-                    "context": prior_context, "draft": ""}
         if (re.search(r"(?:现在|还有|最近|近期|接下来|未来).{0,12}(?:行程|安排|机票|航班|出发)|"
                       r"(?:行程|机票|航班).{0,12}(?:还有|要出发|安排)|"
                       r"(?:明天|后天).{0,12}出发|怎么安排出发", user_text)

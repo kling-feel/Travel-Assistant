@@ -2,6 +2,7 @@
 
 import unittest
 from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from sqlalchemy import insert, select, update
@@ -37,7 +38,81 @@ class EarliestJourneyTests(unittest.TestCase):
     def test_do_not_order_remains_read_only(self):
         self.assertEqual(requested_actions("帮我找那天最早的可售航班，先不要下单。"), [])
         self.assertEqual(requested_actions("不要购买这班机票，先给我看时间。"), [])
+        self.assertEqual(requested_actions(
+            "这个最早的航班先别下单，告诉我当地出发和到达时间、参考报价。"), [])
+        self.assertEqual(requested_actions("暂时别订酒店，只查价格。"), [])
+        self.assertEqual(requested_actions("不用预订租车，先看时间。"), [])
+        self.assertEqual(requested_actions("先别订机票，顺便预订酒店。"), ["hotel_book"])
         self.assertEqual(requested_actions("就预订最早那班"), ["flight_book"])
+
+    def test_source_request_is_not_capability_question(self):
+        intent, _, _ = read_request(
+            "我对自然风景感兴趣，伦敦附近有什么经典地方推荐？请联网核查。",
+            "general", {}, {}, date(2026, 10, 27))
+        self.assertEqual(intent, "recommendation")
+        capability, _, _ = read_request("你没有联网实时查询功能吗？", "general", {}, {},
+                                        date(2026, 10, 27))
+        self.assertEqual(capability, "capabilities")
+
+    def test_read_only_followup_then_explicit_booking(self):
+        model = dialogue_cases.ScriptedModel(
+            {"intent": "flight_search", "params": {}, "answer": ""})
+        client, model_patch, saver_patch = self.fixture.fixture.client(model)
+        original = find_earliest_flights
+        with (model_patch, saver_patch,
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 21)),
+              patch("travel_assistant.services.actions.datetime", _FixedActionClock),
+              patch("travel_assistant.services.agent_reads.find_earliest_flights",
+                    side_effect=lambda db, deps, arrs, **kwargs: original(
+                        db, deps, arrs, now=NOW, **kwargs)), client):
+            auth = self.fixture.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            found = self.fixture.fixture.turn(client, sid, auth, "negated-001",
+                                              "查10月25日从上海到伦敦的航班")
+            self.assertEqual(found.status_code, 200)
+            no_order = self.fixture.fixture.turn(client, sid, auth, "negated-002",
+                "这个最早的航班先别下单，告诉我当地出发和到达时间、参考报价。")
+            self.assertEqual(no_order.status_code, 200, no_order.text)
+            self.assertEqual(no_order.json()["actions"], [])
+            self.assertIn("当地到达", no_order.json()["answer"])
+            with self.engine.connect() as db:
+                self.assertEqual(db.execute(select(pending_actions.c.id)).all(), [])
+            booking = self.fixture.fixture.turn(client, sid, auth, "negated-003",
+                                                "现在预订最早那班机票，先给我待确认卡。")
+            self.assertEqual(booking.status_code, 200, booking.text)
+            self.assertEqual([card["action_type"] for card in booking.json()["actions"]],
+                             ["flight_book"], booking.json())
+            with self.engine.connect() as db:
+                self.assertEqual(db.execute(select(flight_orders.c.id)).all(), [])
+            history = self.fixture.fixture.turn(client, sid, auth, "negated-004",
+                "我之前取消的机票有哪些？只查询历史。")
+            self.assertEqual(history.status_code, 200, history.text)
+            self.assertEqual(history.json()["actions"], [])
+            self.assertIn("历史订单", history.json()["answer"])
+            self.assertNotIn("最早的直达航班", history.json()["answer"])
+
+    def test_api_rejects_a_model_write_for_negated_order(self):
+        model = dialogue_cases.ScriptedModel()
+        client, model_patch, saver_patch = self.fixture.fixture.client(model)
+        wrong_graph = SimpleNamespace(invoke=lambda *_args, **_kwargs: {
+            "intent": "transaction", "params": {}, "answer": "已为你下单",
+            "references": [], "transaction_plan": [
+                {"action_type": "flight_book", "parameters": {"flight_id": 3832}}],
+        })
+        with (model_patch, saver_patch,
+              patch("travel_assistant.api.travel.build_graph", return_value=wrong_graph),
+              client):
+            auth = self.fixture.fixture.auth(client, "demo1", "password1")
+            sid = client.post("/api/v1/sessions", headers=auth, json={}).json()["id"]
+            result = self.fixture.fixture.turn(client, sid, auth, "guard-001",
+                "这个最早的航班先别下单，只告诉我时间和报价。")
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.json()["actions"], [])
+            self.assertNotIn("已为你下单", result.json()["answer"])
+        with self.engine.connect() as db:
+            self.assertEqual(db.execute(select(pending_actions.c.id)).all(), [])
+            self.assertEqual(db.execute(select(flight_orders.c.id)).all(), [])
 
     def test_earliest_search_with_no_order_instruction_creates_no_card(self):
         model = dialogue_cases.ScriptedModel(
