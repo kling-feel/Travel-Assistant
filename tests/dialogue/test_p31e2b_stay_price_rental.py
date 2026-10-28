@@ -271,6 +271,42 @@ class StayPriceRentalTests(unittest.TestCase):
         with self.fixture.engine.connect() as db:
             self.assertEqual(db.execute(select(hotel_orders.c.id)).all(), [])
 
+    def test_first_room_after_airport_search_creates_only_pending_card(self):
+        model = dialogue_cases.ScriptedModel(
+            {"intent": "general", "params": {}, "answer": ""})
+        client, model_patch, saver_patch = self.fixture.client(model)
+        with (model_patch, saver_patch,
+              patch("travel_assistant.agents.controlled.local_today", return_value=date(2026, 10, 23)),
+              patch("travel_assistant.api.travel.local_today", return_value=date(2026, 10, 23)),
+              patch("travel_assistant.services.actions._hotel_today", return_value=date(2026, 10, 23)), client):
+            owner = self.fixture.auth(client, "demo1", "password1")
+            other = self.fixture.auth(client, "demo2", "password2")
+            sid = client.post("/api/v1/sessions", headers=owner, json={}).json()["id"]
+            found = self.fixture.turn(client, sid, owner, "first-room-search",
+                "上海虹桥机场附近10月24日入住、10月26日退房，先看看房型和价格，暂时别订酒店。")
+            self.assertEqual(found.status_code, 200, found.text)
+            self.assertEqual(found.json()["actions"], [])
+            rooms = [row for row in found.json()["references"]
+                     if row.get("type") == "hotel_product"]
+            self.assertGreaterEqual(len(rooms), 2)
+            first = rooms[0]
+            booked = self.fixture.turn(client, sid, owner, "first-room-book",
+                "预订刚才找到的第一间上海虹桥机场附近酒店房型，10月24日入住、10月26日退房，先给我待确认卡。")
+            self.assertEqual(booked.status_code, 200, booked.text)
+            self.assertEqual(len(booked.json()["actions"]), 1, booked.json()["answer"])
+            card = booked.json()["actions"][0]
+            self.assertEqual(card["action_type"], "hotel_book")
+            self.assertEqual(card["status"], "pending")
+            self.assertEqual(card["parameters"]["product_id"], first["id"])
+            self.assertEqual(card["parameters"]["check_in"], "2026-10-24")
+            self.assertEqual(card["parameters"]["check_out"], "2026-10-26")
+            self.assertEqual(card["price"]["new_amount"], first["price"] * 2)
+            foreign = client.get(f"/api/v1/actions/{card['id']}", headers=other)
+            self.assertEqual(foreign.status_code, 404)
+        with self.fixture.engine.connect() as db:
+            self.assertEqual(db.execute(select(hotel_orders.c.id)).all(), [])
+            self.assertEqual(len(db.execute(select(pending_actions.c.id)).all()), 1)
+
     def test_global_max_rental_requires_explicit_times(self):
         model = dialogue_cases.ScriptedModel(
             {"intent": "general", "params": {}, "answer": ""})

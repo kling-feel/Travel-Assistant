@@ -20,6 +20,18 @@ class ProposalSelectionTests(unittest.TestCase):
             self.assertEqual(_product_choice("flight", None, shown, phrase), 22)
         self.assertEqual(_ordinal("改签到第二班，并订第一家酒店", "flight"), 1)
         self.assertEqual(_ordinal("改签到第二班，并订第一家酒店", "hotel"), 0)
+        rooms = [[{"type": "hotel_product", "id": "room-LHR-1"},
+                  {"type": "hotel_product", "id": "room-LHR-2"}]]
+        for phrase, expected in (("预订刚才找到的第一间酒店", "room-LHR-1"),
+                                 ("预订第 1 间房型", "room-LHR-1"),
+                                 ("预订第二间酒店", "room-LHR-2")):
+            self.assertEqual(_product_choice("hotel", None, rooms, phrase), expected)
+        with self.assertRaises(SelectionNeeded):
+            _product_choice("hotel", None, rooms, "预订第三间酒店")
+        with self.assertRaises(SelectionNeeded):
+            _product_choice("hotel", "room-LHR-2", rooms, "预订第一间酒店")
+        with self.assertRaises(SelectionNeeded):
+            _product_choice("hotel", None, [[]], "预订第一间酒店")
         with self.assertRaises(SelectionNeeded):
             _product_choice("flight", 11, shown, "第 2 班")
         with self.assertRaises(SelectionNeeded):
