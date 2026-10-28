@@ -2,6 +2,7 @@
 
 import unittest
 from datetime import date, timedelta
+from html.parser import HTMLParser
 from unittest.mock import patch
 
 from fastapi import FastAPI, HTTPException
@@ -19,6 +20,36 @@ from travel_assistant.core.password_hash import get_hashed_password
 
 
 class PageTests(unittest.TestCase):
+    def test_login_form_waits_for_script_and_native_fallback_keeps_password_out_of_url(self):
+        class LoginFormParser(HTMLParser):
+            form = None
+            button = None
+
+            def handle_starttag(self, tag, attrs):
+                values = dict(attrs)
+                if tag == "form" and values.get("id") == "login-form":
+                    self.form = values
+                if tag == "button" and values.get("id") == "login-button":
+                    self.button = values
+
+        server = Server()
+        server.init_app()
+        with TestClient(server.app) as client:
+            page = client.get("/app")
+            parsed = LoginFormParser()
+            parsed.feed(page.text)
+            self.assertEqual(parsed.form["method"].lower(), "post")
+            self.assertEqual(parsed.form["action"], "/app")
+            self.assertIn("disabled", parsed.button)
+            script = client.get("/static/app.js").text
+            self.assertLess(script.index('$("login-form").addEventListener("submit"'),
+                            script.index('$("login-form").dataset.ready = "true"'))
+            self.assertIn('$("login-button").disabled = false;', script)
+            native = client.post("/app", data={"username": "temporary", "password": "temporary-secret"},
+                                 follow_redirects=False)
+            self.assertEqual(native.status_code, 405)
+            self.assertEqual(native.request.url.query, b"")
+
     def test_readiness_requires_initialized_database(self):
         with patch("main.engine.connect") as connect:
             connect.return_value.__enter__.return_value.execute.return_value.scalar_one_or_none.return_value = date(2026, 10, 25)

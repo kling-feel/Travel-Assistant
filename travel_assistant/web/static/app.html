@@ -7,7 +7,7 @@
   <title>旅程助手 · 我的旅程</title>
   <link rel="icon" type="image/svg+xml" href="/static/mark.svg">
   <link rel="stylesheet" href="/static/app.css?v=8">
-  <script src="/static/app.js?v=13" defer></script>
+  <script src="/static/app.js?v=14" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -17,7 +17,7 @@
   <main>
     <section id="login-view" class="login-layout" aria-labelledby="login-title">
       <div class="intro"><span class="eyebrow">为每一程，留出从容</span><h1>下一段旅程，<br><em>从这里开始。</em></h1><p>用对话安排航班、酒店和租车。从建议到订单变更，每一步都清晰可见。</p><div class="intro-line"><span>01 · 查询</span><span>02 · 核对</span><span>03 · 逐笔确认</span></div><p class="experience-note">作品体验环境｜行程与报价为示例数据，不产生真实预订或付款。</p></div>
-      <form id="login-form" class="login-card"><span class="eyebrow">旅客登录</span><h2 id="login-title">欢迎回来</h2><p>请使用本机配置的旅客账号登录。</p><label for="username">账号</label><input id="username" name="username" type="text" autocomplete="username" required maxlength="80" placeholder="输入账号"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="输入密码"><button id="login-button" class="primary" type="submit">进入旅程 <span aria-hidden="true">↗</span></button><p id="login-message" class="form-message" role="alert"></p></form>
+      <form id="login-form" class="login-card" method="post" action="/app"><span class="eyebrow">旅客登录</span><h2 id="login-title">欢迎回来</h2><p>请使用本机配置的旅客账号登录。</p><label for="username">账号</label><input id="username" name="username" type="text" autocomplete="username" required maxlength="80" placeholder="输入账号"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="输入密码"><button id="login-button" class="primary" type="submit" disabled>进入旅程 <span aria-hidden="true">↗</span></button><p id="login-message" class="form-message" role="alert"></p></form>
     </section>
     <section id="workspace" class="workspace" hidden aria-label="旅客工作台">
       <div class="workspace-head"><div><span class="eyebrow">旅程总览</span><h1>我的旅程</h1><p id="demo-window" class="subtle"></p></div><div class="simulation-tag">作品体验环境 · 示例行程与报价 · 无真实付款</div></div>

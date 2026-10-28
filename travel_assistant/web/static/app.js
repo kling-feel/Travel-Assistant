@@ -833,4 +833,6 @@ async function restoreBrowserSession() {
     }
   } finally { button.disabled = false; }
 }
+$("login-form").dataset.ready = "true";
+$("login-button").disabled = false;
 restoreBrowserSession();
