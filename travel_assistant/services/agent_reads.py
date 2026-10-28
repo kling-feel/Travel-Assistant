@@ -407,6 +407,13 @@ def read_for_assistant(db, traveler_id, intent, params):
             return _result("入住日期、退房日期与所说的住宿夜数不一致，请确认要住几晚或明确退房日期。")
         airport = _as_text(params.get("airport"), 8)
         city = _city(_as_text(params.get("city")))
+        if city and re.fullmatch(r"[A-Za-z]{3}", city):
+            code = city.upper()
+            resolved_city = _airport(db, code)[2]
+            if resolved_city:
+                if airport and airport.upper() != code:
+                    return _result("指定的酒店城市与机场不一致，请重新核对地点。")
+                city, airport = resolved_city, code
         landing_id = params.get("_landing_flight_id")
         landing_day = None
         if landing_id is not None:

@@ -10,6 +10,7 @@ from travel_assistant.db.travel_models import (airports, flight_offers, flights,
                               pending_actions, policy_documents, rental_orders,
                               rental_products)
 from travel_assistant.services.dialogue_context import read_request, rental_clocks
+from travel_assistant.services.agent_reads import read_for_assistant
 from travel_assistant.services.agent_proposals import SelectionNeeded, prepare_actions
 from travel_assistant.services.policy_catalog import CURRENT_POLICIES
 from travel_assistant.services.travel import find_hotels, find_rentals
@@ -25,6 +26,39 @@ class _FixedActionClock(datetime):
 
 
 class StayPriceRentalTests(unittest.TestCase):
+    def test_named_airport_hotel_query_resolves_city_and_keeps_airport(self):
+        london = "伦敦希思罗机场附近11月1日入住、11月3日退房，先看看房型和价格，暂时别订酒店。"
+        _, london_params, _ = read_request(
+            london, "hotel_search", {}, {}, date(2026, 10, 28))
+        self.assertEqual((london_params["city"], london_params["airport"]),
+                         ("London", "LHR"))
+        _, broader, _ = read_request(
+            "换成伦敦市区酒店", "hotel_search", {}, london_params,
+            date(2026, 10, 28))
+        self.assertEqual(broader["city"], "London")
+        self.assertNotIn("airport", broader)
+        utterance = "上海虹桥机场附近10月24日入住、10月26日退房，先看看房型和价格，暂时别订酒店。"
+        intent, params, _ = read_request(
+            utterance, "hotel_search", {}, {}, date(2026, 10, 23))
+        self.assertEqual(intent, "hotel_search")
+        self.assertEqual((params["city"], params["airport"]), ("Shanghai", "SHA"))
+        with self.fixture.engine.begin() as db:
+            result = read_for_assistant(db, "demo1", intent, params)
+            code_only = read_for_assistant(db, "demo1", intent,
+                                           {**params, "city": "SHA", "airport": None})
+        self.assertEqual(len(result["references"]), 3)
+        self.assertTrue(all(row["airport"] == "SHA" for row in result["references"]))
+        self.assertEqual([row["id"] for row in code_only["references"]],
+                         [row["id"] for row in result["references"]])
+        self.assertNotIn("未提供该城市", result["answer"])
+
+    def test_named_airport_rental_query_keeps_airport_scope(self):
+        utterance = "上海虹桥机场附近租车，10月24日取车、10月26日还车"
+        intent, params, _ = read_request(
+            utterance, "rental_search", {}, {}, date(2026, 10, 23))
+        self.assertEqual(intent, "rental_search")
+        self.assertEqual((params["city"], params["airport"]), ("Shanghai", "SHA"))
+
     def test_offer_candidate_requires_fresh_matching_scope(self):
         task = {"city": "Shanghai", "pickup_date": "2026-10-24",
                 "drop_off_date": "2026-10-26"}

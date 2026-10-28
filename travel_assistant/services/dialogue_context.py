@@ -129,6 +129,17 @@ def mentioned_cities(text: str) -> list[str]:
     return result
 
 
+def airport_city(code: str) -> str | None:
+    """Resolve a named airport to its city without treating its code as a city."""
+    name = AIRPORT_NAMES.get(code)
+    if name is None:
+        return None
+    for alias in sorted(_ALIASES, key=len, reverse=True):
+        if name.startswith(alias):
+            return _ALIASES[alias]
+    return None
+
+
 def declared_current_city(text: str) -> str | None:
     """A location claim must be made by the traveler, not inferred from a route."""
     match = re.search(r"我(?:人)?(?:现在|目前)?(?:就)?在|我住在", text)
@@ -266,10 +277,16 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
                   and not hotel and not flight and not direct_route):
         context = dict(previous) if previous.get("intent") == "rental_search" else {"intent": "rental_search"}
         if places:
-            if context.get("city") != places[-1]:
+            place = places[-1]
+            city = airport_city(place) or place
+            if context.get("city") != city:
                 for key in ("pickup_date", "drop_off_date", "pickup_clock", "dropoff_clock"):
                     context.pop(key, None)
-            context["city"] = places[-1]
+            context["city"] = city
+            if city != place:
+                context["airport"] = place
+            else:
+                context.pop("airport", None)
         if len(dates) >= 2:
             context["pickup_date"], context["drop_off_date"] = (value.isoformat() for value in dates[:2])
         elif dates:
@@ -287,10 +304,16 @@ def read_request(text: str, intent: str, params: dict, previous: dict,
                  and not rental and not flight and not direct_route):
         context = dict(previous) if previous.get("intent") == "hotel_search" else {"intent": "hotel_search"}
         if places:
-            if context.get("city") != places[-1]:
+            place = places[-1]
+            city = airport_city(place) or place
+            if context.get("city") != city:
                 for key in ("check_in", "check_out", "nights"):
                     context.pop(key, None)
-            context["city"] = places[-1]
+            context["city"] = city
+            if city != place:
+                context["airport"] = place
+            else:
+                context.pop("airport", None)
         context.pop("date_conflict", None)
         if len(dates) >= 2:
             context["check_in"], context["check_out"] = (value.isoformat() for value in dates[:2])
