@@ -1,0 +1,7 @@
+{
+  "smtp_host": "smtp.qq.com",
+  "smtp_port": 465,
+  "sender": "REPLACE_WITH_QQ_EMAIL",
+  "recipient": "REPLACE_WITH_ALERT_RECIPIENT",
+  "smtp_authorization_code": "REPLACE_WITH_QQ_SMTP_AUTHORIZATION_CODE"
+}

@@ -1,0 +1,10 @@
+{
+  "bucket": "REPLACE_WITH_PRIVATE_BUCKET_NAME",
+  "region": "ap-southeast-1",
+  "prefix": "travel-assistant/backups/",
+  "recipient": "REPLACE_WITH_RECOVERY_PUBLIC_KEY",
+  "access_key_id": "REPLACE_WITH_DEDICATED_RAM_ACCESS_KEY_ID",
+  "access_key_secret": "REPLACE_WITH_DEDICATED_RAM_ACCESS_KEY_SECRET",
+  "age_path": "/usr/local/bin/age",
+  "ossutil_path": "/usr/local/bin/ossutil"
+}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Check encrypted off-site backup freshness and notify
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /usr/local/libexec/travel-assistant/oss_backup_alert.py check
+TimeoutStartSec=45s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/travel-assistant-oss-backup

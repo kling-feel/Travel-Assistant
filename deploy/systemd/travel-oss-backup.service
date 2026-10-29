@@ -1,0 +1,26 @@
+[Unit]
+Description=Encrypted off-site backup of the travel assistant database
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+OnFailure=travel-oss-backup-alert-failure.service
+StartLimitIntervalSec=1h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/travelops/travel-assistant
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /usr/local/libexec/travel-assistant/oss_backup.py run
+TimeoutStartSec=10min
+Restart=on-failure
+RestartSec=10min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/travel-assistant-oss-backup

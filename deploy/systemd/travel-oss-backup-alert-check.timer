@@ -1,0 +1,11 @@
+[Unit]
+Description=Check encrypted off-site backup every hour
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+Unit=travel-oss-backup-alert-check.service
+
+[Install]
+WantedBy=timers.target

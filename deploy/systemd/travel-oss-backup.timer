@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the encrypted off-site database backup daily
+
+[Timer]
+OnCalendar=*-*-* 19:10:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+Unit=travel-oss-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -28,6 +28,11 @@
 | `cloud_compose.py` | 统一执行 2 GiB 云端 Compose 的服务清单、构建、首次初始化、账号管理、启停和状态核对 | 固定叠加正式资源限额文件、私有环境文件及指定项目；没有删除数据卷入口。需要已购买服务器、最终域名和私有配置后才可实际启动 |
 | `manage_travelers.py` | 云端授权账号的创建、轮换、停用 | 只在隔离的管理容器中使用；一次性口令写私有文件，不打印口令；先停用初始账号再开放页面 |
 | `usage_report.py` | 管理员查看模型与搜索调用次数 | 只读取云端用量元数据，不读取消息正文或密钥；实际费用仍以服务商账单为准 |
+| `oss_backup.py` | 云端独立数据库密文备份到私有 OSS | 需服务器 root、专用 RAM 凭证和恢复公钥；先校验正式容器与批次，再加密上传，绝不把恢复私钥放入服务器。执行步骤以 P3.4c3c2 操作计划及后续验收记录为准。 |
+| `oss_backup_alert.py` | 云端 OSS 备份失败、超时及恢复的邮件提醒 | 需仅管理员可读的 SMTP 授权码配置；测试邮件实际送达后再启用提醒和备份定时器。 |
+| `create_oss_backup_config.py` | 为专用桶生成本机私有配置模板和最小前缀 RAM 策略 | 只写 Git 忽略的 `data/generated/`；已有文件拒绝覆盖，凭证由旅客在本机填写，不在聊天传输。 |
+| `verify_oss_backup_bundle.py` | 在隔离恢复前核对已解密备份的批次和内部哈希 | 只读旅客提供的私有解密包，不连接正式库；解密包验收后应移除。 |
+| `install_oss_backup_tools.py` | 安装固定版本的 age 和 ossutil | 先校验发布方 SHA256；不配置 OSS 凭证，也不启用备份定时任务。 |
 | `create_cloud_2g_env.py`／`create_cloud_2g_restore_env.py` | 生成 P3.4b2 独立 2 GiB 限额和恢复演练配置 | 仅写 Git 忽略目录，使用不可调用真实服务的测试密钥；已有文件拒绝覆盖 |
 | `monitor_cloud_2g.py`／`verify_cloud_2g.py`／`verify_cloud_2g_restart.py` | 采样隔离容器内存并验收双账号、查询、交易卡和重启 | 只针对本机 8021／8022 与 `travel-p34b-2g`；结果不代表真实香港服务器或付费模型性能 |
 | `lock_dependencies.py` | 为云端 Linux 构建固定依赖版本 | 从当前虚拟环境生成 `requirements.lock`；更换依赖后需重建并在全新镜像验证 |
