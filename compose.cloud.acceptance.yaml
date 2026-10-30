@@ -1,7 +1,0 @@
-# Local-only override for the cloud startup path. Never use on a public server.
-services:
-  app:
-    ports:
-      - "127.0.0.1:8020:8000"
-  proxy:
-    profiles: [tls-only]
